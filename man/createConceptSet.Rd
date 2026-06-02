@@ -19,6 +19,7 @@ createConceptSet(
   successes = 1,
   additionalInformation = "",
   excludedVocabularies = c("ICDO3"),
+  condenseConceptSet = TRUE,
   clinicalContext = ""
 )
 }
@@ -63,6 +64,8 @@ get a consensus vote from multiple LLM iterations.}
 are desired for the concepts, for example, "only in women"}
 
 \item{excludedVocabularies}{Vocabularies not to be included in the condensing function}
+
+\item{condenseConceptSet}{True/False to perform condenser function}
 
 \item{clinicalContext}{Character. Optional clinical context for the LLM to determine appropriateness of a concept, for example,
 "following surgery" would include concepts whose name indicates it happened post-surgery.}

@@ -45,6 +45,7 @@
     excludedVocabularies <- c("")
   }
   sqlFilename <- "FullConcepts.sql"
+  conceptList <- conceptList[!is.na(conceptList)]
   sql <- SqlRender::loadRenderTranslateSql(
     sqlFilename = sqlFilename,
     packageName = "Phenelope",
@@ -164,7 +165,7 @@
       baseCondition <- query
 
       updatedLines <- gsub("MAIN_CONDITION", baseCondition, originalLines)
-      updatedLines <- gsub("SUGGESTED_CONDITION", testCondition, updatedLines)
+      updatedLines <- gsub("SUGGESTED_CONDITION", gsub("\\[|\\]", "", testCondition), updatedLines) #remove [ and ] - interferes with json structure
       updatedLines <- gsub("EXCLUDED_CONDITIONS", excludedConditions, updatedLines)
       updatedLines <- gsub("CLINICAL_CONTEXT", clinicalContext, updatedLines)
       updatedLines <- gsub("ADDITIONAL_INFORMATION", additionalInformation, updatedLines)
@@ -179,6 +180,11 @@
         tryCatch(
           {
             attempt <- attempt + 1 # Increment the attempt count
+
+            if(attempt > 1) {
+              writeLines(prompt, "e:/shared/llm/joel/pe/prompt.txt")
+            }
+
             if (belowMinimumCountApproach == "TEST ALL" |
               concepts$aboveMin[[conceptUp]] == T |
               (belowMinimumCountApproach == "TEST PHOEBE" & concepts$phoebe[[conceptUp]] == T) |
@@ -186,6 +192,10 @@
               (belowMinimumCountApproach == "INCLUDE ALL" & concepts$aboveMin[[conceptUp]] == T)) {
 
               # text <- llmClient$chat(prompt, echo = "none")
+
+              systemPrompt <- "You are an expert medical doctor specializing in healthcare data analysis. Your primary function is to analyze healthcare data, including electronic health records, to infer causal relationships between exposures and health outcomes."
+
+              llmClient$set_system_prompt(systemPrompt)
 
               text <- llmClient$chat_structured(prompt,
                 echo = "none",
@@ -260,6 +270,7 @@
           error = function(e) {
             # Handle the error: print a message and increment the attempt counter
             message(paste("Attempt", attempt, "failed:", e$message))
+            message(paste0("Failure on: ***", testCondition, "***"))
             if (grepl("abort", e$message, ignore.case = TRUE)) {
               cat("Stopping the run as requested.\n")
               stop("Execution stopped by user.")
@@ -379,5 +390,7 @@
       ))
     }
   }
-  return(unique(bind_rows(phoebeData)))
+  phoebeData <- unique(bind_rows(phoebeData))
+  phoebeData <- phoebeData[!is.na(phoebeData$conceptId),]
+  return(phoebeData)
 }

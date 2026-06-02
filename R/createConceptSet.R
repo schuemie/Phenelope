@@ -51,6 +51,7 @@
 #' @param clinicalContext Character. Optional clinical context for the LLM to determine appropriateness of a concept, for example,
 #'                                  "following surgery" would include concepts whose name indicates it happened post-surgery.
 #' @param excludedVocabularies      Vocabularies not to be included in the condensing function
+#' @param condenseConceptSet      True/False to perform condenser function
 #' @return Final results set as a list of two elements 1) a data frame of the LLM results for each tested concept
 #'                                                     and 2) a JSON object ready for porting into ATLAS if successful, FALSE if unsuccessful.
 #' @export
@@ -68,6 +69,7 @@ createConceptSet <- function(conceptName,
                              successes = 1,
                              additionalInformation = "",
                              excludedVocabularies = c("ICDO3"),
+                             condenseConceptSet = TRUE,
                              clinicalContext = "") {
   errorMessages <- checkmate::makeAssertCollection()
   checkmate::assertClass(connectionDetails, "ConnectionDetails", add = errorMessages)
@@ -84,19 +86,19 @@ createConceptSet <- function(conceptName,
   checkmate::assertIntegerish(originalConceptList, min.len = 1, add = errorMessages)
   checkmate::assertCharacter(belowMinimumCountApproach, len = 1, add = errorMessages)
   checkmate::assertChoice(belowMinimumCountApproach,
-    choices = c(
-      "TEST ALL",
-      "TEST PHOEBE",
-      "EXCLUDE ALL",
-      "INCLUDE ALL"
-    ),
-    add = errorMessages
+                          choices = c(
+                            "TEST ALL",
+                            "TEST PHOEBE",
+                            "EXCLUDE ALL",
+                            "INCLUDE ALL"
+                          ),
+                          add = errorMessages
   )
   checkmate::assertCharacter(outputDirectory, len = 1, add = errorMessages)
   checkmate::assertCharacter(additionalInformation, len = 1, null.ok = TRUE, add = errorMessages)
   checkmate::assertCharacter(clinicalContext, len = 1, null.ok = TRUE, add = errorMessages)
   checkmate::assertCharacter(clinicalContext, len = 1, null.ok = TRUE, add = errorMessages)
-
+  checkmate::assertLogical(condenseConceptSet, add = errorMessages)
   checkmate::reportAssertions(collection = errorMessages)
 
   DatabaseConnector::assertTempEmulationSchemaSet(
@@ -246,8 +248,8 @@ createConceptSet <- function(conceptName,
 
   if (tries > 1) {
     utils::write.csv(joinedDfAll,
-      file.path(outputDirectory, paste0(conditionForFiles, "_all_results.csv")),
-      row.names = F
+                     file.path(outputDirectory, paste0(conditionForFiles, "_all_results.csv")),
+                     row.names = F
     )
   }
 
@@ -266,64 +268,68 @@ createConceptSet <- function(conceptName,
 
   conceptSet <- Capr::getConceptSetDetails(conceptSet, connection, vocabularyDatabaseSchema = cdmDatabaseSchema)
   conceptSet <- jsonlite::fromJSON(as.json(conceptSet))
-
-  retryLimit <- 10 # Maximum number of retries
-  attempt <- 0 # Initial attempt counter
-  success <- FALSE # Flag to indicate success
+  finalConceptSet <- conceptSet #set this as the the final if no condensing is successfully performed
 
   # initial write of code list
   write(
     jsonlite::toJSON(conceptSet,
-      simplifyVector = FALSE,
-      auto_unbox = TRUE
+                     simplifyVector = FALSE,
+                     auto_unbox = TRUE
     ),
     file = file.path(outputDirectory, paste0(conditionForFiles, ".json"))
   )
 
-  while (attempt <= retryLimit && !success) { # llm with mislabel column headers occasionally - usually fixed with a re-try
-    tryCatch(
-      {
-        attempt <- attempt + 1 # Increment the attempt count
-        # Fetch data for concept set
-        conceptSetData <- fetchCondenserConceptSetData(
-          conceptSetExpression = conceptSet,
-          connection = connection,
-          cdmDatabaseSchema = cdmDatabaseSchema,
-          tempEmulationSchema = tempEmulationSchema,
-          excludedVocabularies = excludedVocabularies
-        )
+  if(condenseConceptSet == TRUE) { #only condense concept set if requested
+    retryLimit <- 10 # Maximum number of retries
+    attempt <- 0 # Initial attempt counter
+    success <- FALSE # Flag to indicate success
 
-        # Main condenser function ------------------------------------------------------
-        condensedConceptSet <- condenseConceptSet(conceptSetData)
-        write(jsonlite::toJSON(condensedConceptSet, pretty = TRUE, simplifyVector = FALSE, auto_unbox = TRUE),
-          file = file.path(outputDirectory, paste0(conditionForFiles, ".json"))
-        )
-        message("The artifacts from the process may be found at: ", file.path(outputDirectory))
+    while (attempt <= retryLimit && !success) { # llm with mislabel column headers occasionally - usually fixed with a re-try
+      tryCatch(
+        {
+          attempt <- attempt + 1 # Increment the attempt count
+          # Fetch data for concept set
+          conceptSetData <- fetchCondenserConceptSetData(
+            conceptSetExpression = conceptSet,
+            connection = connection,
+            cdmDatabaseSchema = cdmDatabaseSchema,
+            tempEmulationSchema = tempEmulationSchema,
+            excludedVocabularies = excludedVocabularies
+          )
 
-        success <- TRUE
-      },
-      error = function(e) {
-        # Handle the error: print a message and increment the attempt counter
-        message(paste("Attempt", attempt, "failed:", e$message))
-        if (grepl("abort", e$message, ignore.case = TRUE)) {
-          cat("Stopping the run as requested.\n")
-          stop("Execution stopped by user.")
-        }
-        if (attempt >= retryLimit) {
-          message(paste("Reached attempt limit."))
-          cat("Stopping the run as requested.\n")
-
+          # Main condenser function ------------------------------------------------------
+          condensedConceptSet <- condenseConceptSet(conceptSetData)
+          write(jsonlite::toJSON(condensedConceptSet, pretty = TRUE, simplifyVector = FALSE, auto_unbox = TRUE),
+                file = file.path(outputDirectory, paste0(conditionForFiles, ".json"))
+          )
+          finalConceptSet <- condensedConceptSet #set this as final if condensing was successfully performed
           message("The artifacts from the process may be found at: ", file.path(outputDirectory))
 
-          stop("Execution stopped by user.")
+          success <- TRUE
+        },
+        error = function(e) {
+          # Handle the error: print a message and increment the attempt counter
+          message(paste("Attempt", attempt, "failed:", e$message))
+          if (grepl("abort", e$message, ignore.case = TRUE)) {
+            cat("Stopping the run as requested.\n")
+            stop("Execution stopped by user.")
+          }
+          if (attempt >= retryLimit) {
+            message(paste("Reached attempt limit."))
+            cat("Stopping the run as requested.\n")
+
+            message("The artifacts from the process may be found at: ", file.path(outputDirectory))
+
+            stop("Execution stopped by user.")
+          }
+          return(FALSE) # Return FALSE in case of error
         }
-        return(FALSE) # Return FALSE in case of error
-      }
-    )
+      )
+    }
   }
 
   if (exists("phoebeResults")) {
-    return(list(testedConcepts = phoebeResults, conceptSet = condensedConceptSet))
+    return(list(testedConcepts = phoebeResults, conceptSet = finalConceptSet))
   } else {
     return(NULL)
   }

@@ -17,7 +17,7 @@
       </button>
       <span class="navbar-brand">
         <a class="navbar-link" href="../index.html">Phenelope</a>
-        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">0.1.1</span>
+        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">0.1.2</span>
       </span>
     </div>
 
@@ -78,6 +78,7 @@
 <span>  successes <span class="op">=</span> <span class="fl">1</span>,</span>
 <span>  additionalInformation <span class="op">=</span> <span class="st">""</span>,</span>
 <span>  excludedVocabularies <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"ICDO3"</span><span class="op">)</span>,</span>
+<span>  condenseConceptSet <span class="op">=</span> <span class="cn">TRUE</span>,</span>
 <span>  clinicalContext <span class="op">=</span> <span class="st">""</span></span>
 <span><span class="op">)</span></span></code></pre></div>
     </div>
@@ -155,6 +156,10 @@ are desired for the concepts, for example, "only in women"</p></dd>
 <dd><p>Vocabularies not to be included in the condensing function</p></dd>
 
 
+<dt id="arg-condenseconceptset">condenseConceptSet<a class="anchor" aria-label="anchor" href="#arg-condenseconceptset"></a></dt>
+<dd><p>True/False to perform condenser function</p></dd>
+
+
 <dt id="arg-clinicalcontext">clinicalContext<a class="anchor" aria-label="anchor" href="#arg-clinicalcontext"></a></dt>
 <dd><p>Character. Optional clinical context for the LLM to determine appropriateness of a concept, for example,
 "following surgery" would include concepts whose name indicates it happened post-surgery.</p></dd>
@@ -182,7 +187,7 @@ are desired for the concepts, for example, "only in women"</p></dd>
 </div>
 
 <div class="pkgdown">
-  <p></p><p>Site built with <a href="https://pkgdown.r-lib.org/" class="external-link">pkgdown</a> 2.1.1.</p>
+  <p></p><p>Site built with <a href="https://pkgdown.r-lib.org/" class="external-link">pkgdown</a> 2.2.0.</p>
 </div>
 
       </footer></div>
