@@ -52,6 +52,8 @@
 #'                                  "following surgery" would include concepts whose name indicates it happened post-surgery.
 #' @param excludedVocabularies      Vocabularies not to be included in the condensing function
 #' @param condenseConceptSet      True/False to perform condenser function
+#' @param bucketSize          Number of concepts for LLM to analyze in one pass - Note: larger number may reduce accuracy of evaluation
+#' @param quickRun    T/F - if true, will simply test the concepts in the concept list, i.e., no PHOEBE, descendants
 #' @return Final results set as a list of two elements 1) a data frame of the LLM results for each tested concept
 #'                                                     and 2) a JSON object ready for porting into ATLAS if successful, FALSE if unsuccessful.
 #' @export
@@ -70,7 +72,9 @@ createConceptSet <- function(conceptName,
                              additionalInformation = "",
                              excludedVocabularies = c("ICDO3"),
                              condenseConceptSet = TRUE,
-                             clinicalContext = "") {
+                             clinicalContext = "",
+                             bucketSize = 1,
+                             quickRun = FALSE) {
   errorMessages <- checkmate::makeAssertCollection()
   checkmate::assertClass(connectionDetails, "ConnectionDetails", add = errorMessages)
   checkmate::assertR6(llmClient, "Chat", add = errorMessages)
@@ -99,6 +103,9 @@ createConceptSet <- function(conceptName,
   checkmate::assertCharacter(clinicalContext, len = 1, null.ok = TRUE, add = errorMessages)
   checkmate::assertCharacter(clinicalContext, len = 1, null.ok = TRUE, add = errorMessages)
   checkmate::assertLogical(condenseConceptSet, add = errorMessages)
+  checkmate::assertNumeric(bucketSize, add = errorMessages)
+  checkmate::assertLogical(quickRun, add = errorMessages)
+
   checkmate::reportAssertions(collection = errorMessages)
 
   DatabaseConnector::assertTempEmulationSchemaSet(
@@ -131,84 +138,100 @@ createConceptSet <- function(conceptName,
         file.path(outputDirectory, paste0(conditionForFiles, tryNumber, ".csv")),
         " exists...skipping to next iteration."
       )
-      phoebeResults <- utils::read.csv(file.path(outputDirectory, paste0(conditionForFiles, tryNumber, ".csv")))
+      llmResults <- utils::read.csv(file.path(outputDirectory, paste0(conditionForFiles, tryNumber, ".csv")))
       next
     }
 
-    message("Testing concepts and descendants. ")
+    if(quickRun == FALSE) { #full analysis with phoebe, descendants
+      message("Testing concepts and descendants. ")
 
-    if (file.exists(file.path(outputDirectory, paste0("firstPart_", conditionForFiles, tryNumber, ".csv")))) {
-      # found the first half but not the full analysis, skip the first part and go to the second part
-      message(
-        "File ",
-        file.path(outputDirectory, paste0("firstPart_", conditionForFiles, tryNumber, ".csv")),
-        " exists...skipping to next part of analysis."
+      if (file.exists(file.path(outputDirectory, paste0("firstPart_", conditionForFiles, tryNumber, ".csv")))) {
+        # found the first half but not the full analysis, skip the first part and go to the second part
+        message(
+          "File ",
+          file.path(outputDirectory, paste0("firstPart_", conditionForFiles, tryNumber, ".csv")),
+          " exists...skipping to next part of analysis."
+        )
+        llmResults <- utils::read.csv(file.path(outputDirectory, paste0("firstPart_", conditionForFiles, tryNumber, ".csv")))
+      } else {
+        llmResults <- .createRecommendListViaLlmFromConceptList(
+          query = conceptName,
+          closestConditionConcept = conceptName,
+          conceptList = originalConceptList,
+          llmClient,
+          connection = connection,
+          connectionDetails = connectionDetails,
+          cdmDatabaseSchema = cdmDatabaseSchema,
+          type = "phoebe",
+          minCount = minCount,
+          previousResults = NULL,
+          excludedConditions = excludedConditions,
+          belowMinimumCountApproach,
+          additionalInformation = additionalInformation,
+          clinicalContext = clinicalContext,
+          excludedVocabularies = c(excludedVocabularies),
+          bucketSize = bucketSize
+        )
+
+        utils::write.csv(llmResults, file.path(outputDirectory, paste0("firstPart_", conditionForFiles, tryNumber, ".csv")), row.names = F)
+      }
+
+      previousResults <- llmResults
+
+      included <- unique(c(as.integer(llmResults$conceptId[llmResults$finalAnswer == "YES"])))
+
+      conceptList <- unique(c(originalConceptList, included))
+
+      message("Testing final set of included concepts.")
+
+      # remove ancestors of the original concept set list from the list (don't want to include their descendants)
+      sqlFilename <- "RemoveAncestors.sql"
+      sql <- SqlRender::loadRenderTranslateSql(
+        sqlFilename = sqlFilename,
+        packageName = "Phenelope",
+        dbms = connectionDetails$dbms,
+        cdm_database_schema = cdmDatabaseSchema,
+        concepts_to_use = paste(originalConceptList, collapse = ", ")
       )
-      phoebeResults <- utils::read.csv(file.path(outputDirectory, paste0("firstPart_", conditionForFiles, tryNumber, ".csv")))
-    } else {
-      phoebeResults <- .createRecommendListViaLlmFromConceptList(
+
+      ancestorList <- querySql(connection, sql, snakeCaseToCamelCase = TRUE)
+
+      conceptList <- conceptList[!(conceptList %in% c(unlist(ancestorList)))]
+
+      llmResults <- .createRecommendListViaLlmFromConceptList(
         query = conceptName,
         closestConditionConcept = conceptName,
-        conceptList = originalConceptList,
+        conceptList = conceptList,
         llmClient,
         connection = connection,
         connectionDetails = connectionDetails,
         cdmDatabaseSchema = cdmDatabaseSchema,
-        type = "phoebe",
+        type = "included",
         minCount = minCount,
-        previousResults = NULL,
+        previousResults = previousResults,
         excludedConditions = excludedConditions,
         belowMinimumCountApproach,
         additionalInformation = additionalInformation,
         clinicalContext = clinicalContext,
-        excludedVocabularies = c(excludedVocabularies)
+        excludedVocabularies = c(excludedVocabularies),
+        bucketSize = bucketSize
       )
-
-      utils::write.csv(phoebeResults, file.path(outputDirectory, paste0("firstPart_", conditionForFiles, tryNumber, ".csv")), row.names = F)
+    } else { #quick run - just test a set of concepts
+      llmResults <- .createRecommendListFromConcepts(query = conceptName,
+                                                   closestConditionConcept = conceptName,
+                                                   conceptList = originalConceptList,
+                                                   llmClient,
+                                                   connection = connection,
+                                                   connectionDetails = connectionDetails,
+                                                   cdmDatabaseSchema = cdmDatabaseSchema,
+                                                   excludedConditions = excludedConditions,
+                                                   additionalInformation = additionalInformation,
+                                                   clinicalContext = clinicalContext,
+                                                   bucketSize = bucketSize)
     }
 
-    previousResults <- phoebeResults
-
-    included <- unique(c(as.integer(phoebeResults$conceptId[phoebeResults$finalAnswer == "YES"])))
-
-    conceptList <- unique(c(originalConceptList, included))
-
-    message("Testing final set of included concepts.")
-
-    # remove ancestors of the original concept set list from the list (don't want to include their descendants)
-    sqlFilename <- "RemoveAncestors.sql"
-    sql <- SqlRender::loadRenderTranslateSql(
-      sqlFilename = sqlFilename,
-      packageName = "Phenelope",
-      dbms = connectionDetails$dbms,
-      cdm_database_schema = cdmDatabaseSchema,
-      concepts_to_use = paste(originalConceptList, collapse = ", ")
-    )
-
-    ancestorList <- querySql(connection, sql, snakeCaseToCamelCase = TRUE)
-
-    conceptList <- conceptList[!(conceptList %in% c(unlist(ancestorList)))]
-
-    phoebeResults <- .createRecommendListViaLlmFromConceptList(
-      query = conceptName,
-      closestConditionConcept = conceptName,
-      conceptList = conceptList,
-      llmClient,
-      connection = connection,
-      connectionDetails = connectionDetails,
-      cdmDatabaseSchema = cdmDatabaseSchema,
-      type = "included",
-      minCount = minCount,
-      previousResults = previousResults,
-      excludedConditions = excludedConditions,
-      belowMinimumCountApproach,
-      additionalInformation = additionalInformation,
-      clinicalContext = clinicalContext,
-      excludedVocabularies = c(excludedVocabularies)
-    )
-
     # save to dataframe as a csv
-    utils::write.csv(phoebeResults, file.path(outputDirectory, paste0(conditionForFiles, tryNumber, ".csv")), row.names = F)
+    utils::write.csv(llmResults, file.path(outputDirectory, paste0(conditionForFiles, tryNumber, ".csv")), row.names = F)
   }
 
   # create a master concept set based on the requested number of required successes
@@ -328,8 +351,8 @@ createConceptSet <- function(conceptName,
     }
   }
 
-  if (exists("phoebeResults")) {
-    return(list(testedConcepts = phoebeResults, conceptSet = finalConceptSet))
+  if (exists("llmResults")) {
+    return(list(testedConcepts = llmResults, conceptSet = finalConceptSet))
   } else {
     return(NULL)
   }

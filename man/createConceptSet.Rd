@@ -20,7 +20,9 @@ createConceptSet(
   additionalInformation = "",
   excludedVocabularies = c("ICDO3"),
   condenseConceptSet = TRUE,
-  clinicalContext = ""
+  clinicalContext = "",
+  bucketSize = 1,
+  quickRun = FALSE
 )
 }
 \arguments{
@@ -69,6 +71,10 @@ are desired for the concepts, for example, "only in women"}
 
 \item{clinicalContext}{Character. Optional clinical context for the LLM to determine appropriateness of a concept, for example,
 "following surgery" would include concepts whose name indicates it happened post-surgery.}
+
+\item{bucketSize}{Number of concepts for LLM to analyze in one pass - Note: larger number may reduce accuracy of evaluation}
+
+\item{quickRun}{T/F - if true, will simply test the concepts in the concept list, i.e., no PHOEBE, descendants}
 }
 \value{
 Final results set as a list of two elements 1) a data frame of the LLM results for each tested concept

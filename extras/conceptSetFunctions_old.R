@@ -167,15 +167,13 @@
       resultsDf <- NULL
       resultsDf$conceptId <- concepts$conceptId[[conceptUp]]
       resultsDf$suggestedCondition <- concepts$conceptName[[conceptUp]]
-      resultsDf$mainCondition <- query
+      resultsDf$mainCondition <- baseCondition
       resultsDf$excludedConditions <-  ""
       resultsDf$proposedInExcluded <-  ""
       resultsDf$finalAnswer <-  ""
       resultsDf$rationaleForAnswer <-  ""
       resultsDf$confidenceLevel <-  ""
       resultsDf$tested <- F
-
-      resultsDf <- data.frame(resultsDf)
 
       if (belowMinimumCountApproach == "EXCLUDE ALL") {
         resultsDf$finalAnswer <- "NO"
@@ -191,13 +189,12 @@
         resultsDf$finalAnswer <- "YES"
         resultsDf$rationaleForAnswer <- "Untested"
       }
-
-      resultsDf$cost <- 0
       columnsToFront <- c("suggestedCondition", "conceptId", "mainCondition", "finalAnswer", "rationaleForAnswer", "confidenceLevel")
       # Rearrange the DataFrame
       resultsDf <- resultsDf |>
-        dplyr::select(all_of(columnsToFront), everything())
+        select(all_of(columnsToFront), everything())
       noTestList <- rbind(noTestList, resultsDf)
+
     }
   }
 
@@ -429,6 +426,5 @@
   }
   phoebeData <- unique(bind_rows(phoebeData))
   phoebeData <- phoebeData[!is.na(phoebeData$conceptId),]
-  cat("\n")
   return(phoebeData)
 }

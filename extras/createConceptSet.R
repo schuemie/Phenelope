@@ -32,7 +32,9 @@
 #'                                   instance. Requires read permissions to this database. On SQL
 #'                                   Server, this should specify both the database and the
 #'                                   schema, so for example 'cdm_instance.dbo'.
-#' @param vocabularyDatabaseSchema Character. The database vocabulary to use.
+#' @param tempEmulationSchema	 Some database platforms like Oracle and Impala do not truly support temp tables. To
+#'                             emulate temp tables, provide a schema with write privileges where temp tables can be
+#'                             created.
 #' @param minCount Integer. Minimum cell subject count to use for concepts.
 #' @param belowMinimumCountApproach Character. How to treat concepts below the minimum count. One of "TEST ALL", "TEST PHOEBE",
 #'                                  "EXCLUDE ALL", "INCLUDE ALL". "TEST ALL" = test all the concepts below the minimum count;
@@ -48,225 +50,290 @@
 #'                              are desired for the concepts, for example, "only in women"
 #' @param clinicalContext Character. Optional clinical context for the LLM to determine appropriateness of a concept, for example,
 #'                                  "following surgery" would include concepts whose name indicates it happened post-surgery.
-#' @param vocabularies Character vector. Vocabularies to consider (e.g. c('SNOMED','HCPCS')).
-#' @param quickRun Logical. Quick run flag. Used to get a quick assessment of certain concepts.  The only concepts that will be tested are
-#'                 the ones passed in the concept list (above).
-#'
-#' @return Final results set as a data frame if successful, FALSE if unsuccessful.
+#' @param excludedVocabularies      Vocabularies not to be included in the condensing function
+#' @param condenseConceptSet      True/False to perform condenser function
+#' @param bucketSize          Number of concepts for LLM to analyze in one pass - Note: larger number may reduce accuracy of evaluation
+#' @return Final results set as a list of two elements 1) a data frame of the LLM results for each tested concept
+#'                                                     and 2) a JSON object ready for porting into ATLAS if successful, FALSE if unsuccessful.
 #' @export
 createConceptSet <- function(conceptName,
-                                    originalConceptList,
-                                    excludedConditions = "none",
-                                    llmClient,
-                                    connectionDetails,
-                                    cdmDatabaseSchema,
-                                    vocabularyDatabaseSchema,
-                                    minCount = 0,
-                                    belowMinimumCountApproach = "TEST ALL", # "TEST PHOEBE", "EXCLUDE ALL", "INCLUDE ALL"
-                                    outputDirectory,
-                                    tries = 1,
-                                    successes = 1,
-                                    additionalInformation = "",
-                                    clinicalContext = "",
-                                    vocabularies = c('SNOMED', 'HCPCS','OMOP Extension'),
-                                    quickRun = F) {
+                             originalConceptList,
+                             excludedConditions = "none",
+                             llmClient,
+                             connectionDetails,
+                             cdmDatabaseSchema,
+                             tempEmulationSchema = getOption("sqlRenderTempEmulationSchema"),
+                             minCount = 0,
+                             belowMinimumCountApproach = "TEST ALL", # "TEST PHOEBE", "EXCLUDE ALL", "INCLUDE ALL"
+                             outputDirectory,
+                             tries = 1,
+                             successes = 1,
+                             additionalInformation = "",
+                             excludedVocabularies = c("ICDO3"),
+                             condenseConceptSet = TRUE,
+                             clinicalContext = "",
+                             bucketSize = 1) {
+  errorMessages <- checkmate::makeAssertCollection()
+  checkmate::assertClass(connectionDetails, "ConnectionDetails", add = errorMessages)
+  checkmate::assertR6(llmClient, "Chat", add = errorMessages)
+  checkmate::assertCharacter(cdmDatabaseSchema, len = 1, add = errorMessages)
+  checkmate::assertCharacter(tempEmulationSchema, len = 1, null.ok = TRUE, add = errorMessages)
+  checkmate::assertNumeric(minCount, add = errorMessages)
+  checkmate::assertNumeric(tries, add = errorMessages)
+  checkmate::assertNumeric(successes, add = errorMessages)
 
-  if(!(belowMinimumCountApproach %in% c("TEST ALL", "TEST PHOEBE", "EXCLUDE ALL", "INCLUDE ALL"))) {
-    ParallelLogger::logInfo("belowMinimumCountApproach must be one of the following: TEST ALL, TEST PHOEBE, EXCLUDE ALL, INCLUDE ALL")
-    stop("...correct and restart.")
-  }
+  checkmate::assertCharacter(excludedConditions, len = 1, add = errorMessages)
+
+  checkmate::assertCharacter(conceptName, len = 1, add = errorMessages)
+  checkmate::assertIntegerish(originalConceptList, min.len = 1, add = errorMessages)
+  checkmate::assertCharacter(belowMinimumCountApproach, len = 1, add = errorMessages)
+  checkmate::assertChoice(belowMinimumCountApproach,
+                          choices = c(
+                            "TEST ALL",
+                            "TEST PHOEBE",
+                            "EXCLUDE ALL",
+                            "INCLUDE ALL"
+                          ),
+                          add = errorMessages
+  )
+  checkmate::assertCharacter(outputDirectory, len = 1, add = errorMessages)
+  checkmate::assertCharacter(additionalInformation, len = 1, null.ok = TRUE, add = errorMessages)
+  checkmate::assertCharacter(clinicalContext, len = 1, null.ok = TRUE, add = errorMessages)
+  checkmate::assertCharacter(clinicalContext, len = 1, null.ok = TRUE, add = errorMessages)
+  checkmate::assertLogical(condenseConceptSet, add = errorMessages)
+  checkmate::reportAssertions(collection = errorMessages)
+
+  DatabaseConnector::assertTempEmulationSchemaSet(
+    dbms = connectionDetails$dbms,
+    tempEmulationSchema = tempEmulationSchema
+  )
+  message("\nDeveloping a concept set for: ", conceptName, "\n")
+  connection <- suppressMessages(DatabaseConnector::connect(connectionDetails = connectionDetails))
+  on.exit(DatabaseConnector::disconnect(connection))
 
   if (!dir.exists(outputDirectory)) {
     success <- dir.create(outputDirectory, recursive = TRUE, showWarnings = FALSE)
     if (!success) stop("Failed to create directory: ", outputDirectory)
   }
 
-  conditionForFiles <- gsub("/", "-", conceptName) #remove slashes
+  conditionForFiles <- gsub("/", "-", conceptName) # remove slashes
   conditionForFiles <- paste(utils::head(unlist(strsplit(conditionForFiles, " ")), 3), collapse = " ")
-  if(excludedConditions == "") {excludedConditions <- "None"}
-
-  if(quickRun == F) {
-    #step 0 - create or read clinical description
-    ParallelLogger::logInfo("Creating clinical description from LLM")
-    clinicalDescription <- createClinicalDescription(condition = conceptName, excludedConditions, outputDirectory, llmClient)
-    fullDefinition <- paste(officer::docx_summary(officer::read_docx(clinicalDescription))$text, collapse = "\n")
+  if (excludedConditions == "") {
+    excludedConditions <- "None"
   }
 
-  #create recommended concept set  list(s) based on number of iterations requested
-  ParallelLogger::logInfo("\nUsing model: ", llmClient$get_model(), "\n")
-  for(tryNumber in 1:tries) {
-    tryUp <- tryNumber
-    ParallelLogger::logInfo("Try = ", tryNumber, " out of ", tries)
-    if(file.exists(file.path(outputDirectory,paste0(conditionForFiles,tryNumber,".csv"))) & quickRun == F) { #skip to next iteration if output file exists
-      ParallelLogger::logInfo("File ", file.path(outputDirectory,paste0(conditionForFiles,tryNumber,".csv")), " exists...skipping to next iteration.")
+  # create recommended concept set  list(s) based on number of iterations requested
+  message("\nUsing model: ", llmClient$get_model(), "\n")
+  for (tryNumber in 1:tries) {
+    message("Try = ", tryNumber, " out of ", tries)
+    if (file.exists(file.path(outputDirectory, paste0(conditionForFiles, tryNumber, ".csv")))) {
+      # skip to next iteration if output file exists
+      message(
+        "File ",
+        file.path(outputDirectory, paste0(conditionForFiles, tryNumber, ".csv")),
+        " exists...skipping to next iteration."
+      )
+      phoebeResults <- utils::read.csv(file.path(outputDirectory, paste0(conditionForFiles, tryNumber, ".csv")))
       next
     }
 
-    if(quickRun == T) {
-      conceptList <- originalConceptList #will skip the first 2 passes if only want a quick run (to test a few concepts)
-      previousResults <- NULL
+    message("Testing concepts and descendants. ")
+
+    if (file.exists(file.path(outputDirectory, paste0("firstPart_", conditionForFiles, tryNumber, ".csv")))) {
+      # found the first half but not the full analysis, skip the first part and go to the second part
+      message(
+        "File ",
+        file.path(outputDirectory, paste0("firstPart_", conditionForFiles, tryNumber, ".csv")),
+        " exists...skipping to next part of analysis."
+      )
+      phoebeResults <- utils::read.csv(file.path(outputDirectory, paste0("firstPart_", conditionForFiles, tryNumber, ".csv")))
     } else {
-      ParallelLogger::logInfo("Testing concepts and descendants. ")
-      phoebeResults <- .createRecommendListViaLlmFromConceptList(query = conceptName,
-                                                                 closestConditionConcept = conceptName,
-                                                                 conceptList = originalConceptList,
-                                                                 llmClient,
-                                                                 connectionDetails = connectionDetails,
-                                                                 cdmDatabaseSchema = cdmDatabaseSchema,
-                                                                 type = "phoebe",
-                                                                 minCount = minCount,
-                                                                 previousResults = NULL,
-                                                                 excludedConditions = excludedConditions,
-                                                                 belowMinimumCountApproach,
-                                                                 additionalInformation = additionalInformation,
-                                                                 clinicalContext = clinicalContext,
-                                                                 vocabularies,
-                                                                 quickRun = quickRun)
+      phoebeResults <- .createRecommendListViaLlmFromConceptList(
+        query = conceptName,
+        closestConditionConcept = conceptName,
+        conceptList = originalConceptList,
+        llmClient,
+        connection = connection,
+        connectionDetails = connectionDetails,
+        cdmDatabaseSchema = cdmDatabaseSchema,
+        type = "phoebe",
+        minCount = minCount,
+        previousResults = NULL,
+        excludedConditions = excludedConditions,
+        belowMinimumCountApproach,
+        additionalInformation = additionalInformation,
+        clinicalContext = clinicalContext,
+        excludedVocabularies = c(excludedVocabularies),
+        bucketSize = bucketSize
+      )
 
-      previousResults <- phoebeResults
-
-      included <- unique(c(as.integer(phoebeResults$conceptId[phoebeResults$finalAnswer == 'YES'])))
-
-      conceptList <- unique(c(originalConceptList, included))
+      utils::write.csv(phoebeResults, file.path(outputDirectory, paste0("firstPart_", conditionForFiles, tryNumber, ".csv")), row.names = F)
     }
-    ParallelLogger::logInfo("Testing final set of included concepts.")
 
-    #remove ancestors of the original concept set list from the list (don't want to include their descendants)
-    connection <- suppressMessages(connect(connectionDetails = connectionDetails))
-    sql <- paste0("select distinct ancestor_concept_id ",
-                  "from ", cdmDatabaseSchema, ".concept_ancestor ca ",
-                  "where descendant_concept_id in (", paste(originalConceptList, collapse = ", "), ") ",
-                  "and ancestor_concept_id not in (", paste(originalConceptList, collapse = ", "), ") ")
+    previousResults <- phoebeResults
+
+    included <- unique(c(as.integer(phoebeResults$conceptId[phoebeResults$finalAnswer == "YES"])))
+
+    conceptList <- unique(c(originalConceptList, included))
+
+    message("Testing final set of included concepts.")
+
+    # remove ancestors of the original concept set list from the list (don't want to include their descendants)
+    sqlFilename <- "RemoveAncestors.sql"
+    sql <- SqlRender::loadRenderTranslateSql(
+      sqlFilename = sqlFilename,
+      packageName = "Phenelope",
+      dbms = connectionDetails$dbms,
+      cdm_database_schema = cdmDatabaseSchema,
+      concepts_to_use = paste(originalConceptList, collapse = ", ")
+    )
 
     ancestorList <- querySql(connection, sql, snakeCaseToCamelCase = TRUE)
+
     conceptList <- conceptList[!(conceptList %in% c(unlist(ancestorList)))]
 
-    phoebeResults <- .createRecommendListViaLlmFromConceptList(query = conceptName,
-                                                               closestConditionConcept = conceptName,
-                                                               conceptList = conceptList,
-                                                               llmClient,
-                                                               connectionDetails = connectionDetails,
-                                                               cdmDatabaseSchema = cdmDatabaseSchema,
-                                                               type = "included",
-                                                               minCount = minCount,
-                                                               previousResults = previousResults,
-                                                               excludedConditions = excludedConditions,
-                                                               belowMinimumCountApproach,
-                                                               additionalInformation = additionalInformation,
-                                                               clinicalContext = clinicalContext,
-                                                               vocabularies,
-                                                               quickRun = quickRun)
+    phoebeResults <- .createRecommendListViaLlmFromConceptList(
+      query = conceptName,
+      closestConditionConcept = conceptName,
+      conceptList = conceptList,
+      llmClient,
+      connection = connection,
+      connectionDetails = connectionDetails,
+      cdmDatabaseSchema = cdmDatabaseSchema,
+      type = "included",
+      minCount = minCount,
+      previousResults = previousResults,
+      excludedConditions = excludedConditions,
+      belowMinimumCountApproach,
+      additionalInformation = additionalInformation,
+      clinicalContext = clinicalContext,
+      excludedVocabularies = c(excludedVocabularies),
+      bucketSize = bucketSize
+    )
 
     # save to dataframe as a csv
-    utils::write.csv(phoebeResults, file.path(outputDirectory,paste0(conditionForFiles,tryNumber,".csv")), row.names = F)
+    utils::write.csv(phoebeResults, file.path(outputDirectory, paste0(conditionForFiles, tryNumber, ".csv")), row.names = F)
   }
 
-  if(quickRun == F) {
-    #create a master concept set based on the requested number of required successes
-    #read first iteration
-    joined_df <- utils::read.csv(file.path(outputDirectory,paste0(conditionForFiles, tryNumber,".csv")))
-    joined_df_all <- joined_df
-    joined_df <- joined_df[joined_df$finalAnswer == "YES",]
+  # create a master concept set based on the requested number of required successes
+  # read first iteration
+  joinedDf <- utils::read.csv(file.path(outputDirectory, paste0(conditionForFiles, tryNumber, ".csv")))
+  joinedDfAll <- joinedDf
+  joinedDf <- joinedDf[joinedDf$finalAnswer == "YES", ]
 
-    if(tries > 1) {
-      for(joinUp in 2:tries) {
-        nextData <- utils::read.csv(file.path(outputDirectory,paste0(conditionForFiles,joinUp,".csv")))
-        nextDataAll <- nextData
-        nextData <- nextData[nextData$finalAnswer == "YES",]
+  if (tries > 1) {
+    for (joinUp in 2:tries) {
+      nextData <- utils::read.csv(file.path(outputDirectory, paste0(conditionForFiles, joinUp, ".csv")))
+      nextDataAll <- nextData
+      nextData <- nextData[nextData$finalAnswer == "YES", ]
 
-        joined_df <- joined_df |> full_join(nextData, by = "conceptId")
-        joined_df_all <- joined_df_all |> full_join(nextDataAll, by = "conceptId")
-      }
-    }
-
-    # Prefixes to bring to the head
-    prefixes <- c("suggestedCondition","suggestedCondition.x", "conceptId", "finalAnswer")
-
-    # Create a regex pattern for the prefixes
-    pattern <- paste0("^(", paste(prefixes, collapse = "|"), ")")
-
-    # Get the column names that match any of the prefixes
-    matched_columns <- grep(pattern, names(joined_df_all), value = TRUE)
-
-    # Get the remaining columns
-
-    remaining_columns <- setdiff(names(joined_df_all), matched_columns)
-    # Sort the remaining columns alphabetically
-    remaining_columns_sorted <- remaining_columns[order(remaining_columns)]
-
-    # Reorder the columns
-    joined_df_all <- joined_df_all[, c(matched_columns, remaining_columns_sorted)]
-
-    if(tries > 1) {
-      utils::write.csv(joined_df_all, file.path(outputDirectory,paste0(conditionForFiles,"_all_results.csv")), row.names = F)
-    }
-
-    # Combine responses into one column and count "YES" responses
-    count_df <- joined_df |>
-      tidyr::pivot_longer(cols = starts_with("finalAnswer"), names_to = "Source", values_to = "finalAnswer") |>
-      group_by(.data$conceptId) |>
-      summarize(Yes_Count = sum(.data$finalAnswer == "YES", na.rm = TRUE), .groups = 'drop')
-
-    finalSet <- c(count_df$conceptId[count_df$Yes_Count >= successes])
-    conceptSet <- cs(as.integer(unlist(finalSet)), name = conditionForFiles)
-
-    connection <- suppressMessages(connect(connectionDetails = connectionDetails))
-    conceptSet <- getConceptSetDetails(conceptSet, connection, vocabularyDatabaseSchema = vocabularyDatabaseSchema)
-    disconnect(connection)
-
-    conceptSet <- jsonlite::fromJSON(as.json(conceptSet))
-
-    retry_limit <- 5  # Maximum number of retries
-    attempt <- 1      # Initial attempt counter
-    success <- FALSE  # Flag to indicate success
-
-    #initial write of code list
-    write(jsonlite::toJSON(conceptSet, pretty = TRUE), file = file.path(outputDirectory,paste0(conditionForFiles,".json")))
-
-    while (attempt <= retry_limit && !success) { #llm with mislabel column headers occasionally - usually fixed with a re-try
-      tryCatch({
-        connection <- suppressMessages(connect(connectionDetails = connectionDetails))
-
-        # Fetch data for concept set
-        conceptSetData <- fetchCondenserConceptSetData(
-          conceptSetExpression = conceptSet,
-          connection = connection,
-          cdmDatabaseSchema = cdmDatabaseSchema
-        )
-
-        # Main condenser function ------------------------------------------------------
-        condensedConceptSet <- condenseConceptSet(conceptSetData)
-        condensedConceptSet$items <- Filter(
-          function(el) el$concept$VOCABULARY_ID %in% vocabularies,
-          condensedConceptSet$items
-        )
-        write(jsonlite::toJSON(condensedConceptSet, pretty = TRUE), file = file.path(outputDirectory,paste0(conditionForFiles,".json")))
-        ParallelLogger::logInfo("The artifacts from the process may be found at: ", file.path(outputDirectory))
-
-        success <- TRUE
-      },
-      error = function(e) {
-        # Handle the error: print a message and increment the attempt counter
-        message(paste("Attempt", attempt, "failed:", e$message))
-        if(grepl("abort", e$message, ignore.case=TRUE)) {
-          cat("Stopping the run as requested.\n")
-          stop("Execution stopped by user.")
-        }
-        attempt <- attempt + 1  # Increment the attempt count
-        if(attempt >= retry_limit) {
-          message(paste("Reached attempt limit."))
-          cat("Stopping the run as requested.\n")
-
-          ParallelLogger::logInfo("The artifacts from the process may be found at: ", file.path(outputDirectory))
-
-          stop("Execution stopped by user.")
-        }
-        return(FALSE)  # Return FALSE in case of error
-      })
+      joinedDf <- joinedDf |> full_join(nextData, by = "conceptId")
+      joinedDfAll <- joinedDfAll |> full_join(nextDataAll, by = "conceptId")
     }
   }
-  if(exists("phoebeResults")) {
-    return(phoebeResults)
+
+  # Prefixes to bring to the head
+  prefixes <- c("suggestedCondition", "suggestedCondition.x", "conceptId", "finalAnswer")
+
+  # Create a regex pattern for the prefixes
+  pattern <- paste0("^(", paste(prefixes, collapse = "|"), ")")
+
+  # Get the column names that match any of the prefixes
+  matchedColumns <- grep(pattern, names(joinedDfAll), value = TRUE)
+
+  # Get the remaining columns
+
+  remainingColumns <- setdiff(names(joinedDfAll), matchedColumns)
+  # Sort the remaining columns alphabetically
+  remainingColumnsSorted <- remainingColumns[order(remainingColumns)]
+
+  # Reorder the columns
+  joinedDfAll <- joinedDfAll[, c(matchedColumns, remainingColumnsSorted)]
+
+  if (tries > 1) {
+    utils::write.csv(joinedDfAll,
+                     file.path(outputDirectory, paste0(conditionForFiles, "_all_results.csv")),
+                     row.names = F
+    )
+  }
+
+  # Combine responses into one column and count "YES" responses
+  countDf <- joinedDf |>
+    tidyr::pivot_longer(cols = starts_with("finalAnswer"), names_to = "Source", values_to = "finalAnswer") |>
+    group_by(.data$conceptId) |>
+    summarize(Yes_Count = sum(.data$finalAnswer == "YES", na.rm = TRUE), .groups = "drop")
+
+  finalSet <- c(countDf$conceptId[countDf$Yes_Count >= successes])
+  if (length(finalSet) == 0) { # zero yes values in assessment
+    message("NOTE: There were no concepts included in the concept set.")
+    return(NULL)
+  }
+  conceptSet <- cs(as.integer(unlist(finalSet)), name = conditionForFiles)
+
+  conceptSet <- Capr::getConceptSetDetails(conceptSet, connection, vocabularyDatabaseSchema = cdmDatabaseSchema)
+  conceptSet <- jsonlite::fromJSON(as.json(conceptSet))
+  finalConceptSet <- conceptSet #set this as the the final if no condensing is successfully performed
+
+  # initial write of code list
+  write(
+    jsonlite::toJSON(conceptSet,
+                     simplifyVector = FALSE,
+                     auto_unbox = TRUE
+    ),
+    file = file.path(outputDirectory, paste0(conditionForFiles, ".json"))
+  )
+
+  if(condenseConceptSet == TRUE) { #only condense concept set if requested
+    retryLimit <- 10 # Maximum number of retries
+    attempt <- 0 # Initial attempt counter
+    success <- FALSE # Flag to indicate success
+
+    while (attempt <= retryLimit && !success) { # llm with mislabel column headers occasionally - usually fixed with a re-try
+      tryCatch(
+        {
+          attempt <- attempt + 1 # Increment the attempt count
+          # Fetch data for concept set
+          conceptSetData <- fetchCondenserConceptSetData(
+            conceptSetExpression = conceptSet,
+            connection = connection,
+            cdmDatabaseSchema = cdmDatabaseSchema,
+            tempEmulationSchema = tempEmulationSchema,
+            excludedVocabularies = excludedVocabularies
+          )
+
+          # Main condenser function ------------------------------------------------------
+          condensedConceptSet <- condenseConceptSet(conceptSetData)
+          write(jsonlite::toJSON(condensedConceptSet, pretty = TRUE, simplifyVector = FALSE, auto_unbox = TRUE),
+                file = file.path(outputDirectory, paste0(conditionForFiles, ".json"))
+          )
+          finalConceptSet <- condensedConceptSet #set this as final if condensing was successfully performed
+          message("The artifacts from the process may be found at: ", file.path(outputDirectory))
+
+          success <- TRUE
+        },
+        error = function(e) {
+          # Handle the error: print a message and increment the attempt counter
+          message(paste("Attempt", attempt, "failed:", e$message))
+          if (grepl("abort", e$message, ignore.case = TRUE)) {
+            cat("Stopping the run as requested.\n")
+            stop("Execution stopped by user.")
+          }
+          if (attempt >= retryLimit) {
+            message(paste("Reached attempt limit."))
+            cat("Stopping the run as requested.\n")
+
+            message("The artifacts from the process may be found at: ", file.path(outputDirectory))
+
+            stop("Execution stopped by user.")
+          }
+          return(FALSE) # Return FALSE in case of error
+        }
+      )
+    }
+  }
+
+  if (exists("phoebeResults")) {
+    return(list(testedConcepts = phoebeResults, conceptSet = finalConceptSet))
   } else {
     return(NULL)
   }

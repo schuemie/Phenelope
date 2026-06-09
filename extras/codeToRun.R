@@ -55,6 +55,24 @@ HELLPsyndrome <- list(conceptList = c(4316372), #list of seed concepts to start 
                       tries = 1, #the number of times you want llm to go through the list if you are concerned about consistency
                       successes = 1) #the number of successes (Ubiquitous) responses that must be achieved to include concept
 
+HELLPsyndrome <- list(conceptList = c(4316372), #list of seed concepts to start the analysis
+                      condition = "HELLP syndrome", #important - this will determine what llm uses as the main condition
+                      excludedConditions = "none", #text list of conditions that should be excluded
+                      excludeCauses = F, #set to true if you don't want to include causes in the concepts (usually left as F)
+                      belowMinimumCountApproach = "EXCLUDE ALL", #how to test/not test concepts below minimum counts - important for cancers
+                      #choose: "TEST ALL" to test all the concepts below the minimum count
+                      #"TEST PHOEBE" to test only the ones below the minimum count AND recommended by PHOEBE
+                      #   and automatically set all the others (descendants) to Yes
+                      #"EXCLUDE ALL" to automatically set all the ones below the minimum count to No (won't be in concept set)
+                      #"INCLUDE ALL" to automatically set all the ones below the minimum count to Yes (will be in concept set)
+                      minCount = 10, #the threshold for testing (see above)
+                      outputFolder = "p:/shared/llm/HELLP syndrome", #where you want the final artifacts to be saved
+                      clinicalContext = "patients in general population", #if you want a concept set specific to a prior condition, add it here
+                      additionalInformation = "", #added information for the prompt
+                      tries = 3, #the number of times you want llm to go through the list if you are concerned about consistency
+                      successes = 2) #the number of successes (Ubiquitous) responses that must be achieved to include concept
+
+
 conditionList <- list(HELLPsyndrome) #can put multiple concept set specs in this list
 
 ################################################################################################
@@ -80,7 +98,10 @@ for(conditionUp in 1:length(conditionList)) {
                                           belowMinimumCountApproach = conditionList[[conditionUp]]$belowMinimumCountApproach,
                                           clinicalContext = conditionList[[conditionUp]]$clinicalContext,
                                           additionalInformation = conditionList[[conditionUp]]$additionalInformation,
-                                          outputDirectory = conditionList[[conditionUp]]$outputFolder)
+                                          outputDirectory = conditionList[[conditionUp]]$outputFolder,
+                                          # quickRun = T,
+                                          condenseConceptSet = F,
+                                          bucketSize = 20)
 
   #after job extras
   if(!is.null(finalSet)) {
