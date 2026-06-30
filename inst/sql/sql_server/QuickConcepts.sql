@@ -1,7 +1,8 @@
 select concept_id as concept_id, concept_name
-from @cdm_database_schema.concept c
-where concept_id in (@concept_list)
+from (VALUES @concept_list ) v(id)
+JOIN @cdm_database_schema.concept c
+  ON c.concept_id = v.id
 --and upper(domain_id) in ('CONDITION', 'OBSERVATION', 'PROCEDURE', 'DRUG', 'MEASUREMENT')
-and invalid_reason is NULL;
+where invalid_reason is NULL;
 
 

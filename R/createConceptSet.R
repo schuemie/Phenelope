@@ -24,7 +24,7 @@
 #'
 #' @param conceptName Character. Name of the concept pointing to the clinical condition.
 #' @param originalConceptList Integer or character vector. List of concept ids to use as a starting point.
-#' @param excludedConditions Character. Names of conditions to be excluded from the concept set.
+#' @param excludedConcepts Character. Names of concepts to be excluded from the concept set.
 #' @param llmClient connection object for the LLM client (see ellmer package for object details)
 #' @param connectionDetails An R object of type connectionDetails created using the function createConnectionDetails in the
 #'                          DatabaseConnector package.
@@ -53,13 +53,14 @@
 #' @param excludedVocabularies      Vocabularies not to be included in the condensing function
 #' @param condenseConceptSet      True/False to perform condenser function
 #' @param bucketSize          Number of concepts for LLM to analyze in one pass - Note: larger number may reduce accuracy of evaluation
+#' @param domain              The proportion domain for the elements in the concept set: "ALL" (>95%),  "SOME" (>5%)
 #' @param quickRun    T/F - if true, will simply test the concepts in the concept list, i.e., no PHOEBE, descendants
 #' @return Final results set as a list of two elements 1) a data frame of the LLM results for each tested concept
 #'                                                     and 2) a JSON object ready for porting into ATLAS if successful, FALSE if unsuccessful.
 #' @export
 createConceptSet <- function(conceptName,
                              originalConceptList,
-                             excludedConditions = "none",
+                             excludedConcepts = "none",
                              llmClient,
                              connectionDetails,
                              cdmDatabaseSchema,
@@ -72,8 +73,9 @@ createConceptSet <- function(conceptName,
                              additionalInformation = "",
                              excludedVocabularies = c("ICDO3"),
                              condenseConceptSet = TRUE,
-                             clinicalContext = "",
+                             clinicalContext = "any clinical context",
                              bucketSize = 1,
+                             domain = "ALL",
                              quickRun = FALSE) {
   errorMessages <- checkmate::makeAssertCollection()
   checkmate::assertClass(connectionDetails, "ConnectionDetails", add = errorMessages)
@@ -84,7 +86,7 @@ createConceptSet <- function(conceptName,
   checkmate::assertNumeric(tries, add = errorMessages)
   checkmate::assertNumeric(successes, add = errorMessages)
 
-  checkmate::assertCharacter(excludedConditions, len = 1, add = errorMessages)
+  checkmate::assertCharacter(excludedConcepts, len = 1, add = errorMessages)
 
   checkmate::assertCharacter(conceptName, len = 1, add = errorMessages)
   checkmate::assertIntegerish(originalConceptList, min.len = 1, add = errorMessages)
@@ -95,6 +97,13 @@ createConceptSet <- function(conceptName,
                             "TEST PHOEBE",
                             "EXCLUDE ALL",
                             "INCLUDE ALL"
+                          ),
+                          add = errorMessages
+  )
+  checkmate::assertChoice(domain,
+                          choices = c(
+                            "SOME",
+                            "ALL"
                           ),
                           add = errorMessages
   )
@@ -123,8 +132,8 @@ createConceptSet <- function(conceptName,
 
   conditionForFiles <- gsub("/", "-", conceptName) # remove slashes
   conditionForFiles <- paste(utils::head(unlist(strsplit(conditionForFiles, " ")), 3), collapse = " ")
-  if (excludedConditions == "") {
-    excludedConditions <- "None"
+  if (excludedConcepts == "") {
+    excludedConcepts <- "None"
   }
 
   # create recommended concept set  list(s) based on number of iterations requested
@@ -165,11 +174,12 @@ createConceptSet <- function(conceptName,
           type = "phoebe",
           minCount = minCount,
           previousResults = NULL,
-          excludedConditions = excludedConditions,
+          excludedConcepts = excludedConcepts,
           belowMinimumCountApproach,
           additionalInformation = additionalInformation,
           clinicalContext = clinicalContext,
           excludedVocabularies = c(excludedVocabularies),
+          domain = domain,
           bucketSize = bucketSize
         )
 
@@ -209,11 +219,12 @@ createConceptSet <- function(conceptName,
         type = "included",
         minCount = minCount,
         previousResults = previousResults,
-        excludedConditions = excludedConditions,
+        excludedConcepts = excludedConcepts,
         belowMinimumCountApproach,
         additionalInformation = additionalInformation,
         clinicalContext = clinicalContext,
         excludedVocabularies = c(excludedVocabularies),
+        domain = domain,
         bucketSize = bucketSize
       )
     } else { #quick run - just test a set of concepts
@@ -224,9 +235,10 @@ createConceptSet <- function(conceptName,
                                                    connection = connection,
                                                    connectionDetails = connectionDetails,
                                                    cdmDatabaseSchema = cdmDatabaseSchema,
-                                                   excludedConditions = excludedConditions,
+                                                   excludedConcepts = excludedConcepts,
                                                    additionalInformation = additionalInformation,
                                                    clinicalContext = clinicalContext,
+                                                   domain = domain,
                                                    bucketSize = bucketSize)
     }
 
@@ -252,7 +264,7 @@ createConceptSet <- function(conceptName,
   }
 
   # Prefixes to bring to the head
-  prefixes <- c("suggestedCondition", "suggestedCondition.x", "conceptId", "finalAnswer")
+  prefixes <- c("suggestedConcept", "suggestedConcept.x", "conceptId", "finalAnswer")
 
   # Create a regex pattern for the prefixes
   pattern <- paste0("^(", paste(prefixes, collapse = "|"), ")")
@@ -287,6 +299,8 @@ createConceptSet <- function(conceptName,
     message("NOTE: There were no concepts included in the concept set.")
     return(NULL)
   }
+  tmp <- suppressWarnings(as.integer(unlist(finalSet)))
+  finalSet <- tmp[!is.na(tmp)]
   conceptSet <- cs(as.integer(unlist(finalSet)), name = conditionForFiles)
 
   conceptSet <- Capr::getConceptSetDetails(conceptSet, connection, vocabularyDatabaseSchema = cdmDatabaseSchema)

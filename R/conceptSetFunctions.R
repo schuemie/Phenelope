@@ -24,11 +24,12 @@
                                                       type = "phoebe",
                                                       minCount = 500,
                                                       previousResults,
-                                                      excludedConditions = "none",
+                                                      excludedConcepts = "none",
                                                       belowMinimumCountApproach = "TEST ALL",
                                                       additionalInformation = "",
-                                                      clinicalContext = "",
+                                                      clinicalContext,
                                                       excludedVocabularies = c("ICDO3"),
+                                                      domain,
                                                       bucketSize) {
   if (type == "phoebe") {
     text <- "PHOEBE"
@@ -109,13 +110,17 @@
       concepts <- conceptList
     }
   } else { # else test against included concepts
-    recs <- .getPhoebeData(c(conceptList$conceptId)) # get phoebe data on this pass solely for the record counts
+    if(minCount > 0) { #need to get record count as it is used to determine eligible concepts
+      recs <- .getPhoebeData(c(conceptList$conceptId)) # get phoebe data on this pass solely for the record counts
+    } else { #don't need to get record counts on this pass as it won't be used to determine eligible concepts
+      recs <- data.frame() #set to empty df
+    }
 
     concepts <- conceptList
     recsFinal <- conceptList
   }
 
-  if (nrow(recs) != 0) { # no phoebe recs
+  if (nrow(recs) != 0) { # phoebe recs found
     concepts <- merge(concepts, unique(recs[, c("conceptId", "conceptName", "recordCount")]), all.x = T)
   } else { # no phoebe recs
     concepts$recordCount <- NA
@@ -149,7 +154,12 @@
 
   # read in the basic prompt
 
-  promptUp <- system.file("prompts", "LLM_Prompt_for_PHOEBE.txt", package = "Phenelope")
+  if(bucketSize > 1) {
+    # promptUp <- system.file("prompts", "LLM_Prompt_for_PHOEBE.txt", package = "Phenelope")
+    promptUp <- system.file("prompts", "LLM_Prompt_for_PHOEBE_generic.txt", package = "Phenelope")
+  } else {
+    promptUp <- system.file("prompts", "LLM_Prompt_for_PHOEBE_single.txt", package = "Phenelope")
+  }
   originalLines <- readLines(promptUp)
 
   #test which in the concept list need to be tested
@@ -166,9 +176,9 @@
     } else { #add concept to listed of untested as per min count and disposition
       resultsDf <- NULL
       resultsDf$conceptId <- concepts$conceptId[[conceptUp]]
-      resultsDf$suggestedCondition <- concepts$conceptName[[conceptUp]]
+      resultsDf$suggestedConcept <- concepts$conceptName[[conceptUp]]
       resultsDf$mainCondition <- query
-      resultsDf$excludedConditions <-  ""
+      resultsDf$excludedConcepts <-  ""
       resultsDf$proposedInExcluded <-  ""
       resultsDf$finalAnswer <-  ""
       resultsDf$rationaleForAnswer <-  ""
@@ -193,7 +203,7 @@
       }
 
       resultsDf$cost <- 0
-      columnsToFront <- c("suggestedCondition", "conceptId", "mainCondition", "finalAnswer", "rationaleForAnswer", "confidenceLevel")
+      columnsToFront <- c("suggestedConcept", "conceptId", "mainCondition", "finalAnswer", "rationaleForAnswer", "confidenceLevel")
       # Rearrange the DataFrame
       resultsDf <- resultsDf |>
         dplyr::select(all_of(columnsToFront), everything())
@@ -213,7 +223,7 @@
     startPoint <- 1
     endPoint <- min(bucketSize, nrow(concepts))
     while(startPoint <= nrow(concepts)) {
-      cat(paste0("--Querying LLM - Analyzing concepts ", startPoint, " through ", endPoint, " of ", nrow(concepts), "\r"))
+      cat(paste0("--Querying LLM - Analyzing concepts ", startPoint, " through ", endPoint, " of ", nrow(concepts), "  \r"))
       concepts$aboveMin[1] <- T # always test the first concept
 
       # for (conceptUp in 1:nrow(concepts)) {
@@ -225,12 +235,26 @@
       # testConceptId <- concepts$conceptId[[conceptUp]]
       baseCondition <- query
 
-      updatedLines <- gsub("MAIN_CONDITION", baseCondition, originalLines)
+      updatedLines <- gsub("MAIN_CONCEPT", baseCondition, originalLines)
+
+      if(bucketSize == 1) {
+        testConditionShort <- concepts[startPoint:endPoint, c("conceptName")]
+        updatedLines <- gsub("SUGGESTED_CONCEPT_SHORT", testConditionShort, updatedLines)
+      }
+
       json_all <- jsonlite::toJSON(testCondition)
-      updatedLines <- gsub("SUGGESTED_CONDITION", json_all, updatedLines)
-      updatedLines <- gsub("EXCLUDED_CONDITIONS", excludedConditions, updatedLines)
+      updatedLines <- gsub("SUGGESTED_CONCEPT", json_all, updatedLines)
+
+      updatedLines <- gsub("EXCLUDED_CONCEPTS", excludedConcepts, updatedLines)
       updatedLines <- gsub("CLINICAL_CONTEXT", clinicalContext, updatedLines)
       updatedLines <- gsub("ADDITIONAL_INFORMATION", additionalInformation, updatedLines)
+
+      if(domain == "ALL") { #the concept must almost always be a part of the main concept
+        proportionValue <- "the vast majority (> 95%)"
+      } else { #the concept must a proportion of the main concept to be a part of the main concept
+        proportionValue <- "a proportion (> 5%)"
+      }
+      updatedLines <- gsub("PROPORTION_VALUE", proportionValue, updatedLines)
 
       prompt <- paste(updatedLines, collapse = "\n")
 
@@ -243,43 +267,55 @@
           {
             attempt <- attempt + 1 # Increment the attempt count
 
-            if(attempt > 1) {
-              writeLines(prompt, "e:/shared/llm/joel/pe/prompt.txt")
-            }
-
             systemPrompt <- "You are an expert medical doctor specializing in healthcare data analysis. Your primary function is to analyze healthcare data, including electronic health records, to infer causal relationships between exposures and health outcomes."
 
             llmClient$set_system_prompt(systemPrompt)
 
-            text <- llmClient$chat_structured(prompt,
-                                              echo = "none",
-                                              type = ellmer::type_array(ellmer::type_object(
-                                                conceptId = ellmer::type_string(),
-                                                suggestedCondition = ellmer::type_string(),
-                                                excludedConditions = ellmer::type_string(),
-                                                proposedInExcluded = ellmer::type_string(),
-                                                finalAnswer = ellmer::type_string(),
-                                                rationaleForAnswer = ellmer::type_string(),
-                                                confidenceLevel = ellmer::type_string()
-                                              ))
-            )
+            fullBucket <- FALSE
+            bucketAttempt <- 0
+            while(!fullBucket) {
+              bucketAttempt <- bucketAttempt + 1
+              bucketItems <- (endPoint - startPoint) + 1
+              text <- llmClient$chat_structured(prompt,
+                                                echo = "none",
+                                                type = ellmer::type_array(ellmer::type_object(
+                                                  conceptId = ellmer::type_string(),
+                                                  suggestedConcept = ellmer::type_string(),
+                                                  excludedConcepts = ellmer::type_string(),
+                                                  proposedInExcluded = ellmer::type_string(),
+                                                  finalAnswer = ellmer::type_string(),
+                                                  rationaleForAnswer = ellmer::type_string(),
+                                                  confidenceLevel = ellmer::type_string()
+                                                ))
+              )
 
-            if (is.character(text)) {
-              if (jsonlite::validate(text)) {
-                text <- jsonlite::fromJSON(text)
+              if (is.character(text)) {
+                if (jsonlite::validate(text)) {
+                  text <- jsonlite::fromJSON(text)
+                }
+              }
+
+              resultsDf <- data.frame(text)
+              if(nrow(resultsDf) == bucketItems) { #same rows sent out as received
+                fullBucket <- TRUE
+                bucketAttempt <- 0
+              } else {
+                cat(paste0("---Querying LLM - Analyzing concepts ", startPoint, " through ", endPoint, " of ", nrow(concepts), "\r"))
+
+                if(bucketAttempt == 10) {
+                  stop("LLM connection issue...stopping")
+                }
               }
             }
-
-            resultsDf <- data.frame(text)
             resultsDf$tested <- T
 
             # resultsDf$suggestedCondition <- testCondition
             # resultsDf$conceptId <- testConceptId
             resultsDf$mainCondition <- baseCondition
-            # resultsDf$exclusions <- excludedConditions
+            # resultsDf$exclusions <- excludedConcepts
             resultsDf$cost <- sprintf("%.5f", llmClient$get_cost())
 
-            columnsToFront <- c("suggestedCondition", "conceptId", "mainCondition", "finalAnswer", "rationaleForAnswer", "confidenceLevel")
+            columnsToFront <- c("suggestedConcept", "conceptId", "mainCondition", "finalAnswer", "rationaleForAnswer", "confidenceLevel")
 
             ### exclude phoebe recommended concepts with low confidence
             # if (as.numeric(sub("%", "", resultsDf$confidenceLevel)) < 50 & concepts$phoebe[[conceptUp]] == T &
@@ -328,7 +364,7 @@
       endPoint <- min(endPoint + bucketSize, nrow(concepts))
     }
 
-    message("\n--Total cost was $", sprintf("%.3f", cost))
+    message("\n\n--Total cost was $", sprintf("%.3f", cost))
 
     fullResults <- results
     if(length(noTestList)) { #add in the untested if any
@@ -362,6 +398,8 @@
   fullResults <- unique(fullResults)
 
   message("--Number of total concepts: ", nrow(fullResults))
+
+  saveLastPrompt(prompt)
 
   return(fullResults)
 }
@@ -428,7 +466,63 @@
     }
   }
   phoebeData <- unique(bind_rows(phoebeData))
-  phoebeData <- phoebeData[!is.na(phoebeData$conceptId),]
+  if(nrow(phoebeData) > 0) {
+    phoebeData <- phoebeData[!is.na(phoebeData$conceptId),]
+  }
   cat("\n")
   return(phoebeData)
+}
+
+.getPhoebeDataBulk <- function(concepts) {
+  phoebeUrlstring <- "https://hecate.pantheon-hds.com/api/concepts/phoebe/bulk"
+
+  phoebeData <- list()
+
+  start <- 1
+  batchSize <- 500
+  while (start <= length(concepts)) {
+    end <- min(start + batchSize - 1, length(concepts))
+    cat(paste0("\r--Searching PHOEBE - Analyzing ", start, " to ", end, " out of ", length(concepts)))
+    ids <- concepts[start:end]
+    response <- httr::POST(phoebeUrlstring, body = list(ids = as.integer(ids)), encode = "json" )
+
+    if (httr::status_code(response) == 200) {
+      contextText <- httr::content(response, "text", encoding = "UTF-8")
+      if (contextText == "[]") {
+        data <- NULL
+      } else {
+        data <- jsonlite::fromJSON(contextText)
+        data <- data |>
+          SqlRender::snakeCaseToCamelCaseNames()
+        phoebeData[[length(phoebeData) + 1]] <- data
+      }
+    } else {
+      stop(sprintf(
+        "Error in phoebe search for concept %s: %s",
+        conceptUp,
+        httr::status_code(response)
+      ))
+    }
+    start <- end + 1
+  }
+  phoebeData <- unique(bind_rows(phoebeData))
+  if(nrow(phoebeData) > 0) {
+    phoebeData <- phoebeData[!is.na(phoebeData$conceptId),]
+  }
+  cat("\n")
+  return(phoebeData)
+}
+
+saveLastPrompt <- function(prompt) {
+  promptDir <- file.path("./lastPrompt")
+  if (!dir.exists(promptDir)) {
+    success <- dir.create(promptDir, recursive = TRUE, showWarnings = FALSE)
+    if (!success) stop("Failed to create directory: ", promptDir)
+  }
+
+  if(typeof(prompt) == "character") {
+    con <- file(file.path(promptDir, "prompt.txt"), open = "w", encoding = "UTF-8")
+    writeLines(prompt, con)
+    close(con)
+  }
 }

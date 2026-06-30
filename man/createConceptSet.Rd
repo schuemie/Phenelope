@@ -7,7 +7,7 @@
 createConceptSet(
   conceptName,
   originalConceptList,
-  excludedConditions = "none",
+  excludedConcepts = "none",
   llmClient,
   connectionDetails,
   cdmDatabaseSchema,
@@ -20,8 +20,9 @@ createConceptSet(
   additionalInformation = "",
   excludedVocabularies = c("ICDO3"),
   condenseConceptSet = TRUE,
-  clinicalContext = "",
+  clinicalContext = "any clinical context",
   bucketSize = 1,
+  domain = "ALL",
   quickRun = FALSE
 )
 }
@@ -30,7 +31,7 @@ createConceptSet(
 
 \item{originalConceptList}{Integer or character vector. List of concept ids to use as a starting point.}
 
-\item{excludedConditions}{Character. Names of conditions to be excluded from the concept set.}
+\item{excludedConcepts}{Character. Names of concepts to be excluded from the concept set.}
 
 \item{llmClient}{connection object for the LLM client (see ellmer package for object details)}
 
@@ -73,6 +74,8 @@ are desired for the concepts, for example, "only in women"}
 "following surgery" would include concepts whose name indicates it happened post-surgery.}
 
 \item{bucketSize}{Number of concepts for LLM to analyze in one pass - Note: larger number may reduce accuracy of evaluation}
+
+\item{domain}{The proportion domain for the elements in the concept set: "ALL" (>95%),  "SOME" (>5%)}
 
 \item{quickRun}{T/F - if true, will simply test the concepts in the concept list, i.e., no PHOEBE, descendants}
 }
