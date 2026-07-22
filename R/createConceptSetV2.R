@@ -187,6 +187,12 @@ createConceptSet <- function(conceptName,
         classes <- c("Visit")
         phoebeExclusions <- c("Ontology-parent") #not valuable for visits
 
+      } else if(domainToUse %in% c("DEVICE")) {
+        #get seed concept ids from hecate
+        domains <- c("Device")
+        classes <- c("Physical Object")
+        phoebeExclusions <- c("Ontology-parent") #not valuable for visits
+
       } else if(domainToUse %in% c("DRUG")) {
         #get seed concept ids from hecate
         domains <- c("DRUG")
