@@ -195,13 +195,13 @@ createConceptSet <- function(conceptName,
 
       if(domainToUse %in% c("DRUG")) { #concept set for drugs
         llmResults <- .getDrugConceptSet(searchString = searchString,
-                                        connectionDetails = connectionDetails,
-                                        cdmDatabaseSchema = cdmDatabaseSchema,
-                                        llmClientReasoning,
-                                        llmClientNonReasoning,
-                                        additionalInformation = additionalInformation,
-                                        outputDirectory = outputDirectory,
-                                        clinicalContext = clinicalContext)
+                                         connectionDetails = connectionDetails,
+                                         cdmDatabaseSchema = cdmDatabaseSchema,
+                                         llmClientReasoning,
+                                         llmClientNonReasoning,
+                                         additionalInformation = additionalInformation,
+                                         outputDirectory = outputDirectory,
+                                         clinicalContext = clinicalContext)
 
       } else { #concept set for all others
         #create the concept sets for the item
@@ -226,16 +226,24 @@ createConceptSet <- function(conceptName,
       }
 
     } else { #quick run - just test a set of concepts
-      if(bucketSize > 1) {
-        prompt <- system.file("prompts", "LLM_Prompt_for_PHOEBE_generic.txt", package = "Phenelope")
+      if(domainToUse %in% c("DRUG")) { #concept set for drugs
+        if(bucketSize > 1) {
+          promptToUse <- system.file("prompts", "LLM_Prompt_for_PHOEBE_drug.txt", package = "Phenelope")
+        } else {
+          promptToUse <- system.file("prompts", "LLM_Prompt_for_PHOEBE_single_drug.txt", package = "Phenelope")
+        }
       } else {
-        prompt <- system.file("prompts", "LLM_Prompt_for_PHOEBE_single.txt", package = "Phenelope")
+        if(bucketSize > 1) {
+          promptToUse <- system.file("prompts", "LLM_Prompt_for_PHOEBE_generic.txt", package = "Phenelope")
+        } else {
+          promptToUse <- system.file("prompts", "LLM_Prompt_for_PHOEBE_single_generic.txt", package = "Phenelope")
+        }
       }
 
       llmResults <- .createRecommendListFromConcepts(query = conceptName,
                                                      conceptList = originalConceptList,
-                                                     prompt = prompt,
-                                                     llmClient = llmClient,
+                                                     prompt = promptToUse,
+                                                     llmClient = llmClientNonReasoning,
                                                      connection = connection,
                                                      connectionDetails = connectionDetails,
                                                      cdmDatabaseSchema = cdmDatabaseSchema,

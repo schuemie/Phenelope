@@ -26,7 +26,7 @@ llmClient <- ellmer::chat_azure_openai(
 llmClientNonReasoning <- llmClient
 
 #adjust the code below for your database info - specific database doesn't matter - just a route to get to the vocab
-currentCcaeVersion <- 3789
+currentCcaeVersion <- 3909
 dbConnectionString <- paste("jdbc:databricks://",
                             Sys.getenv("DATABRICKS_HOST"),
                             ":443/default;transportMode=http;ssl=1;AuthMech=3;httpPath=",
