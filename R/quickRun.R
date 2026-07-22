@@ -1,14 +1,13 @@
 .createRecommendListFromConcepts <- function(query,
-                                             closestConditionConcept,
                                              conceptList,
                                              llmClient,
-                                             connection,
+                                             prompt,
                                              connectionDetails,
+                                             connection,
                                              cdmDatabaseSchema,
                                              excludedConcepts = "none",
                                              additionalInformation = "",
                                              clinicalContext,
-                                             domain,
                                              bucketSize = 1) {
 
   text <- "included concepts"
@@ -38,12 +37,15 @@
 
   # read in the basic prompt
 
-  if(bucketSize > 1) {
-    # promptUp <- system.file("prompts", "LLM_Prompt_for_PHOEBE.txt", package = "Phenelope")
-    promptUp <- system.file("prompts", "LLM_Prompt_for_PHOEBE_generic.txt", package = "Phenelope")
-  } else {
-    promptUp <- system.file("prompts", "LLM_Prompt_for_PHOEBE_single.txt", package = "Phenelope")
-  }
+  # if(bucketSize > 1) {
+  #   # promptUp <- system.file("prompts", "LLM_Prompt_for_PHOEBE.txt", package = "Phenelope")
+  #   promptUp <- system.file("prompts", "LLM_Prompt_for_PHOEBE_generic.txt", package = "Phenelope")
+  # } else {
+  #   promptUp <- system.file("prompts", "LLM_Prompt_for_PHOEBE_single.txt", package = "Phenelope")
+  # }
+  #
+
+  promptUp <- prompt
   originalLines <- readLines(promptUp)
 
   #test which in the concept list need to be tested
@@ -76,12 +78,12 @@
       updatedLines <- gsub("CLINICAL_CONTEXT", clinicalContext, updatedLines)
       updatedLines <- gsub("ADDITIONAL_INFORMATION", additionalInformation, updatedLines)
 
-      if(domain == "ALL") { #the concept must almost always be a part of the main concept
-        proportionValue <- "the vast majority (> 95%)"
-      } else { #the concept must a proportion of the main concept to be a part of the main concept
-        proportionValue <- "a proportion (> 5%)"
-      }
-      updatedLines <- gsub("PROPORTION_VALUE", proportionValue, updatedLines)
+      # if(domain == "ALL") { #the concept must almost always be a part of the main concept
+      #   proportionValue <- "the vast majority (> 95%)"
+      # } else { #the concept must a proportion of the main concept to be a part of the main concept
+      #   proportionValue <- "a proportion (> 5%)"
+      # }
+      # updatedLines <- gsub("PROPORTION_VALUE", proportionValue, updatedLines)
 
       prompt <- paste(updatedLines, collapse = "\n")
 

@@ -32,12 +32,12 @@ D1) For the domain of HEALTH CONDITIONS, if the proposed concept implies that pa
   Example 1: "Disorder due to type 2 diabetes mellitus" implies that the patient has "Type 2 Diabetes", so it should be included.
 D2) For the domain of VISITS, if the proposed concept implies a PLACE where the specific type of visit likely occurred, it should be included.
   Example 1: a specific concept "Mobile Radiology Clinic/Center" is a PLACE where "Outpatient visits" occur, thus it should be included with "Outpatient visits".
-D3) For the domain of PROCEDURES, if an action word is ambiguous, use a narrow sense of the word, i.e., true > 95% of the time, a very specific interpretation.
-  Example 1: the word excision does not always imply a partial or complete excision, assume the interpretation of the word > 95% of the time.
-    "Excision of bilateral breasts" would NOT be included with "Bilateral mastectomy of female breast", in this case assuming excision means "complete excision" < 95% of the time
+D3) For the domain of PROCEDURES, if an action word is ambiguous, assume it applies to MAIN_CONCEPT if it applies > 5% of the time, take a very sensitive interpretation.
+  Example 1: the word excision does not always imply a partial or complete excision, assume the interpretation of the word > 5% of the time.
+    "Excision of bilateral breasts" would be included with "Bilateral mastectomy of female breast", in this case assuming excision means "complete excision" > 5% of the time
 
 Use the following specific rules to decide on your answer:
-S1) If the vast majority (> 95%) of instances of the proposed concept(s) make it a part of MAIN_CONCEPT in CLINICAL_CONTEXT, the answer is YES.
+S1) If the majority (> 50%) of instances of the proposed concept(s) make it a part of MAIN_CONCEPT in CLINICAL_CONTEXT, the answer is YES.
 Positive Example:  a proposed concept of "Photochemotherapy" nearly ALWAYS involves chemo AND photo therapy, so it should be included in a specific concept of "phototherapy procedure" even though it also includes chemical therapy.
 Negative Example:  a proposed concept of "Procedure on skin" DOES NOT specify phototherapy although most phototherapy involves the skin (phototherapy is NOT specified and should NOT be assumed) AND the vast majority of "Procedure on skin" ARE NOT phototherapy, so it should NOT be included in a specific concept of "phototherapy procedure".
 S2) If proposed concept(s) is ALWAYS a synonym of MAIN_CONCEPT and in the clinical context, CLINICAL_CONTEXT, the answer is YES.
@@ -53,7 +53,7 @@ Give a JSON-structured summary for the following (DO NOT ADD ANY OTHER NON-JSON 
     "suggestedConcept": "proposed concept name",
     "excludedConcepts": "Create a comma separated string of the excluded concepts.",
     "proposedInExcluded": "Is proposed concept in the excluded concepts (EXCLUDED_CONCEPTS)? (YES or NO)",
-    "finalAnswer": "Do the vast majority (> 95%) of instances of the proposed concept make it a part of MAIN_CONCEPT in the current clinical context (CLINICAL_CONTEXT)? [IMPORTANT Answer ONLY as: 'YES', 'NO' (DO NOT REPEAT THE QUESTION IN YOUR ANSWER!)]",
+    "finalAnswer": "Do the majority (> 50%) of instances of the proposed concept make it a part of MAIN_CONCEPT in the current clinical context (CLINICAL_CONTEXT)? [IMPORTANT Answer ONLY as: 'YES', 'NO' (DO NOT REPEAT THE QUESTION IN YOUR ANSWER!)]",
     "rationaleForAnswer": "Provide a rationale for your answer INCLUDING the rule above that was satisfied",
     "confidenceLevel": "What is your confidence level for your answer? [Only answer as: 0% - 100%]"
 

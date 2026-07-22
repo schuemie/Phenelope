@@ -13,6 +13,8 @@ llmClient <- ellmer::chat_azure_openai(
   credentials = function() keyring::key_get("genai_api_gpt4_key")
 )
 
+llmClientReasoning <- llmClient
+
 # The 4o model is recommended
 llmClient <- ellmer::chat_azure_openai(
   endpoint = gsub("/openai/deployments.*", "", keyring::key_get("genai_gpt4o_endpoint")),
@@ -21,13 +23,15 @@ llmClient <- ellmer::chat_azure_openai(
   credentials = function() keyring::key_get("genai_api_gpt4_key")
 )
 
+llmClientNonReasoning <- llmClient
+
 #adjust the code below for your database info - specific database doesn't matter - just a route to get to the vocab
 currentCcaeVersion <- 3789
 dbConnectionString <- paste("jdbc:databricks://",
                             Sys.getenv("DATABRICKS_HOST"),
                             ":443/default;transportMode=http;ssl=1;AuthMech=3;httpPath=",
                             Sys.getenv("DATABRICKS_HTTP_PATH"),
-                            ";EnableArrow=1;",sep='')
+                            ";EnableArrow=0;",sep='')
 
 ccaeConnection <- list(cdmDatabaseSchema = paste0("merative_ccae.cdm_merative_ccae_v", currentCcaeVersion),
                        connectionDetails = DatabaseConnector::createConnectionDetails(dbms = "spark",
@@ -38,25 +42,7 @@ database <- ccaeConnection
 
 #example - these are the parameters you would use to create a real concept set (below are parameters for testing functions)
 #HELLPsyndrome is a good one to test BUT change the conceptSetName and outputFolder first
-HELLPsyndrome <- list(conceptList = c(4316372), #list of seed concepts to start the analysis
-                      condition = "HELLP syndrome", #important - this will determine what llm uses as the main condition
-                      excludedConcepts = "none", #text list of conditions that should be excluded
-                      excludeCauses = F, #set to true if you don't want to include causes in the concepts (usually left as F)
-                      belowMinimumCountApproach = "TEST ALL", #how to test/not test concepts below minimum counts - important for cancers
-                      #choose: "TEST ALL" to test all the concepts below the minimum count
-                      #"TEST PHOEBE" to test only the ones below the minimum count AND recommended by PHOEBE
-                      #   and automatically set all the others (descendants) to Yes
-                      #"EXCLUDE ALL" to automatically set all the ones below the minimum count to No (won't be in concept set)
-                      #"INCLUDE ALL" to automatically set all the ones below the minimum count to Yes (will be in concept set)
-                      minCount = 0, #the threshold for testing (see above)
-                      outputFolder = "p:/shared/llm/HELLP syndrome", #where you want the final artifacts to be saved
-                      clinicalContext = "patients in general population", #if you want a concept set specific to a prior condition, add it here
-                      additionalInformation = "", #added information for the prompt
-                      tries = 1, #the number of times you want llm to go through the list if you are concerned about consistency
-                      successes = 1) #the number of successes (Ubiquitous) responses that must be achieved to include concept
-
-HELLPsyndrome <- list(conceptList = c(4316372), #list of seed concepts to start the analysis
-                      condition = "HELLP syndrome", #important - this will determine what llm uses as the main condition
+HELLPsyndrome <- list(condition = "HELLP syndrome", #important - this will determine what llm uses as the main condition
                       excludedConcepts = "none", #text list of conditions that should be excluded
                       excludeCauses = F, #set to true if you don't want to include causes in the concepts (usually left as F)
                       belowMinimumCountApproach = "EXCLUDE ALL", #how to test/not test concepts below minimum counts - important for cancers
@@ -87,22 +73,21 @@ for(conditionUp in 1:length(conditionList)) {
 
   #create concept set
   finalSet <- Phenelope::createConceptSet(conceptName = conditionList[[conditionUp]]$condition,
-                                          originalConceptList = conditionList[[conditionUp]]$conceptList,
                                           excludedConcepts = conditionList[[conditionUp]]$excludedConcepts,
                                           tries = conditionList[[conditionUp]]$tries,
                                           successes = conditionList[[conditionUp]]$successes,
-                                          llmClient = llmClient,
+                                          llmClientReasoning = llmClientReasoning,
+                                          llmClientNonReasoning = llmClientNonReasoning,
                                           connectionDetails = database$connectionDetails,
                                           cdmDatabaseSchema = database$cdmDatabaseSchema,
                                           minCount = conditionList[[conditionUp]]$minCount,
                                           belowMinimumCountApproach = conditionList[[conditionUp]]$belowMinimumCountApproach,
-                                          # clinicalContext = conditionList[[conditionUp]]$clinicalContext,
+                                          clinicalContext = conditionList[[conditionUp]]$clinicalContext,
                                           additionalInformation = conditionList[[conditionUp]]$additionalInformation,
                                           outputDirectory = conditionList[[conditionUp]]$outputFolder,
-                                          quickRun = T,
-                                          condenseConceptSet = F,
-                                          domain = "ALL",
-                                          bucketSize = 1)
+                                          quickRun = F,
+                                          condenseConceptSet = T,
+                                          bucketSize = 20)
 
   #after job extras
   if(!is.null(finalSet)) {

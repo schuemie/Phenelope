@@ -30,6 +30,7 @@
                                                       clinicalContext,
                                                       excludedVocabularies = c("ICDO3"),
                                                       domain,
+                                                      phoebeExclusions = phoebeExclusions,
                                                       bucketSize) {
   if (type == "phoebe") {
     text <- "PHOEBE"
@@ -42,6 +43,9 @@
   message("Getting GenAI similarity response for ", text, " for query: ", query)
 
   message("--Getting concept set expression")
+
+  connection2 <- suppressMessages(DatabaseConnector::connect(connectionDetails = connectionDetails))
+  on.exit(DatabaseConnector::disconnect(connection2))
 
   if (is.null(excludedVocabularies)) {
     excludedVocabularies <- c("")
@@ -57,18 +61,25 @@
     excludedVocabularies = paste(sprintf("'%s'", excludedVocabularies), collapse = ", ")
   )
 
-  conceptList <- DatabaseConnector::querySql(connection, sql, snakeCaseToCamelCase = TRUE)
+  conceptList <- DatabaseConnector::querySql(connection = connection2, sql = sql, snakeCaseToCamelCase = TRUE)
   if (nrow(conceptList) != 0) {
     conceptList$phoebe <- F
   }
 
   message("--Finding ", type, " results for concept set")
   if (type == "phoebe") {
-    recs <- .getPhoebeData(c(conceptList$conceptId))
+    # recs <- .getPhoebeData(c(conceptList$conceptId))
+    recs <- .getAnyPhoebeData(c(conceptList$conceptId))
+
+    if(nrow(recs) != 0) {
+      if(length(phoebeExclusions)) {
+        recs <- recs[!(recs$relationshipId %in% c(phoebeExclusions)),]
+      }
+      recs <- recs[!(recs$conceptId %in% c(conceptList$conceptId)), ]
+    }
     recsFinal <- recs
 
     if (nrow(recsFinal) != 0) { # check if phoebe had any recommendations
-      recsFinal <- recsFinal[!(recsFinal$conceptId %in% c(conceptList$conceptId)), ]
       sqlFilename <- "checkDomainsForConcepts.sql"
       sql <- SqlRender::loadRenderTranslateSql(
         sqlFilename = sqlFilename,
@@ -79,7 +90,7 @@
         excludedVocabularies = paste(sprintf("'%s'", excludedVocabularies), collapse = ", ")
       )
 
-      concepts <- DatabaseConnector::querySql(connection, sql, snakeCaseToCamelCase = TRUE)
+      concepts <- DatabaseConnector::querySql(connection = connection2, sql, snakeCaseToCamelCase = TRUE)
       concepts$phoebe <- T
 
       # Substrings to exclude
@@ -111,7 +122,8 @@
     }
   } else { # else test against included concepts
     if(minCount > 0) { #need to get record count as it is used to determine eligible concepts
-      recs <- .getPhoebeData(c(conceptList$conceptId)) # get phoebe data on this pass solely for the record counts
+      # recs <- .getPhoebeData(c(conceptList$conceptId)) # get phoebe data on this pass solely for the record counts
+      recs <- .getAnyPhoebeData(c(conceptList$conceptId)) # get phoebe data on this pass solely for the record counts
     } else { #don't need to get record counts on this pass as it won't be used to determine eligible concepts
       recs <- data.frame() #set to empty df
     }
@@ -127,18 +139,18 @@
   }
 
   concepts <- concepts |>
-    mutate(recordCount = if_else(is.na(.data$recordCount), 0, .data$recordCount)) |>
-    mutate(aboveMin = .data$recordCount >= minCount) |>
-    arrange(desc(.data$phoebe), desc(.data$aboveMin))
+    dplyr::mutate(recordCount = dplyr::if_else(is.na(.data$recordCount), 0, .data$recordCount)) |>
+    dplyr::mutate(aboveMin = .data$recordCount >= minCount) |>
+    dplyr::arrange(desc(.data$phoebe), desc(.data$aboveMin))
 
   message("\n--Current number of concepts: ", nrow(concepts))
 
   previousRun <- data.frame()
   if (!is.null(previousResults)) {
     previousRun <- previousResults |>
-      filter(.data$conceptId %in% concepts$conceptId)
+      dplyr::filter(.data$conceptId %in% concepts$conceptId)
     concepts <- concepts |>
-      filter(!.data$conceptId %in% previousResults$conceptId)
+      dplyr::filter(!.data$conceptId %in% previousResults$conceptId)
     message("--skipping previously analyzed concepts yields: ", nrow(concepts))
   }
 
@@ -158,7 +170,7 @@
     # promptUp <- system.file("prompts", "LLM_Prompt_for_PHOEBE.txt", package = "Phenelope")
     promptUp <- system.file("prompts", "LLM_Prompt_for_PHOEBE_generic.txt", package = "Phenelope")
   } else {
-    promptUp <- system.file("prompts", "LLM_Prompt_for_PHOEBE_single.txt", package = "Phenelope")
+    promptUp <- system.file("prompts", "LLM_Prompt_for_PHOEBE_single_generic.txt", package = "Phenelope")
   }
   originalLines <- readLines(promptUp)
 
@@ -226,11 +238,6 @@
       cat(paste0("--Querying LLM - Analyzing concepts ", startPoint, " through ", endPoint, " of ", nrow(concepts), "  \r"))
       concepts$aboveMin[1] <- T # always test the first concept
 
-      # for (conceptUp in 1:nrow(concepts)) {
-      #   if (conceptUp > 1) {
-      #     cat(paste0("\r--Querying LLM - Analyzing ", conceptUp, " of ", nrow(concepts)))
-      #   }
-
       testCondition <- concepts[startPoint:endPoint, c("conceptId", "conceptName")]
       # testConceptId <- concepts$conceptId[[conceptUp]]
       baseCondition <- query
@@ -249,14 +256,15 @@
       updatedLines <- gsub("CLINICAL_CONTEXT", clinicalContext, updatedLines)
       updatedLines <- gsub("ADDITIONAL_INFORMATION", additionalInformation, updatedLines)
 
-      if(domain == "ALL") { #the concept must almost always be a part of the main concept
-        proportionValue <- "the vast majority (> 95%)"
-      } else { #the concept must a proportion of the main concept to be a part of the main concept
-        proportionValue <- "a proportion (> 5%)"
-      }
-      updatedLines <- gsub("PROPORTION_VALUE", proportionValue, updatedLines)
+      # if(domain == "ALL") { #the concept must almost always be a part of the main concept
+      #   proportionValue <- "the vast majority (> 95%)"
+      # } else { #the concept must a proportion of the main concept to be a part of the main concept
+      #   proportionValue <- "a proportion (> 5%)"
+      # }
+      # updatedLines <- gsub("PROPORTION_VALUE", proportionValue, updatedLines)
 
       prompt <- paste(updatedLines, collapse = "\n")
+      lastPrompt <- prompt
 
       retryLimit <- 10 # Maximum number of retries
       attempt <- 0 # Initial attempt counter
@@ -326,7 +334,7 @@
 
             # Rearrange the DataFrame
             resultsDf <- resultsDf |>
-              select(all_of(columnsToFront), everything())
+              dplyr::select(all_of(columnsToFront), everything())
 
             results <- rbind(results, resultsDf)
 
@@ -374,11 +382,11 @@
     if (type == "phoebe") { # only join this for phoebe results
       if (nrow(recsFinal) != 0) {
         fullResults <- fullResults |>
-          mutate(conceptId = as.integer(.data$conceptId)) |>
-          left_join(unique(recsFinal[, c("conceptId", "recordCount")]), by = c("conceptId" = "conceptId"))
+          dplyr::mutate(conceptId = as.integer(.data$conceptId)) |>
+          dplyr::left_join(unique(recsFinal[, c("conceptId", "recordCount")]), by = c("conceptId" = "conceptId"))
       } else { # no phoebe recs
         fullResults <- fullResults |>
-          mutate(conceptId = as.integer(.data$conceptId))
+          dplyr::mutate(conceptId = as.integer(.data$conceptId))
       }
     }
 
@@ -399,7 +407,9 @@
 
   message("--Number of total concepts: ", nrow(fullResults))
 
-  saveLastPrompt(prompt)
+  if(nrow(concepts) != 0) {
+    saveLastPrompt(lastPrompt)
+  }
 
   return(fullResults)
 }
@@ -438,6 +448,22 @@
   }
 }
 
+.getAnyPhoebeData <- function(concepts) { #depends on the length of the concept list
+  if(length(concepts) == 1) {
+    phoebeData <- .getPhoebeData(concepts)
+  } else if(length(concepts) > 1) {
+    phoebeData <- .getPhoebeDataBulk(concepts)
+  } else {
+    phoebeData <- NULL
+  }
+
+  # if(ncol(phoebeData) < 5) {#if bulk did not return the correct number of columns, re-do as single
+  #   phoebeData <- .getPhoebeData(concepts)
+  # }
+
+  return(phoebeData)
+}
+
 .getPhoebeData <- function(concepts) {
   phoebeUrlstring <- "https://hecate.pantheon-hds.com/api/concepts/%d/phoebe"
 
@@ -465,7 +491,7 @@
       ))
     }
   }
-  phoebeData <- unique(bind_rows(phoebeData))
+  phoebeData <- unique(dplyr::bind_rows(phoebeData))
   if(nrow(phoebeData) > 0) {
     phoebeData <- phoebeData[!is.na(phoebeData$conceptId),]
   }
@@ -492,8 +518,19 @@
         data <- NULL
       } else {
         data <- jsonlite::fromJSON(contextText)
-        data <- data |>
-          SqlRender::snakeCaseToCamelCaseNames()
+        if(ncol(data) < 5) {#fix the data if there is an error
+          fulldata <- NULL
+          for(rowUp in 1:nrow(data)){
+            if(length(data$results[[rowUp]])) { #only add rows where phoebe data was found
+              fulldata <- rbind(fulldata, data$results[[rowUp]])
+            }
+          }
+          data <- fulldata
+          if(!is.null(data)) {
+            data <- data |>
+              SqlRender::snakeCaseToCamelCaseNames()
+          }
+        }
         phoebeData[[length(phoebeData) + 1]] <- data
       }
     } else {
@@ -505,7 +542,7 @@
     }
     start <- end + 1
   }
-  phoebeData <- unique(bind_rows(phoebeData))
+  phoebeData <- unique(dplyr::bind_rows(phoebeData))
   if(nrow(phoebeData) > 0) {
     phoebeData <- phoebeData[!is.na(phoebeData$conceptId),]
   }
@@ -525,4 +562,75 @@ saveLastPrompt <- function(prompt) {
     writeLines(prompt, con)
     close(con)
   }
+}
+
+.getDomain <- function(llmClient, searchString) {
+
+  ellmerTypeObject <- ellmer::type_array(ellmer::type_object(
+    term = ellmer::type_string(),
+    domain = ellmer::type_enum(values = c("DRUG","CONDITION","PROCEDURE","VISIT","DEVICE", "MEASUREMENT"))
+  ))
+
+  prompt <- paste0("Determine what domain category, DRUG, CONDITION, PROCEDURE, MEASUREMENT, VISIT, or DEVICE, the following belongs to: ",
+                   searchString,
+                   "  [{
+                            \"term\": \"Name of the search term\",
+                            \"domain\": \"Domain name\"
+                            }]")
+
+  domainName <- queryLLM(llmClient = llmClient, prompt = prompt, ellmerTypeObject = ellmerTypeObject)
+
+  return(domainName)
+}
+
+queryLLM <- function(llmClient, prompt, systemPrompt = NULL, silent = TRUE, output = "data frame", array = F, ellmerTypeObject = NULL) {
+  if(!silent) {ParallelLogger::logInfo("\n--Querying LLM...")}
+
+  retry_limit <- 10  # Maximum number of retries
+  attempt <- 0      # Initial attempt counter
+  success <- FALSE  # Flag to indicate success
+
+  while (attempt <= retry_limit && !success) { #llm will mislabel column headers occasionally - usually fixed with a re-try
+    tryCatch({
+      attempt <- attempt + 1  # Increment the attempt count
+
+      if(output == "text") { #simple text return
+        text <- llmClient$chat(prompt,
+                               echo = "none")
+        results <- text
+      } else { #json return
+        text <- llmClient$chat_structured(prompt,
+                                          echo = "none",
+                                          type = ellmerTypeObject
+        )
+
+        if(!array) {fromLLM <- jsonlite::fromJSON(jsonlite::toJSON(text))
+        } else {fromLLM <- jsonlite::fromJSON(text)
+        }
+
+        fromLLM$cost <- sprintf("%.4f", llmClient$get_cost(include = "last"))
+
+        if(output == "data frame") {
+          results <- data.frame(fromLLM)
+        } else {
+          results <- fromLLM
+        }
+      }
+      success <- TRUE
+    },
+    error = function(e) {
+      # Handle the error: print a message and increment the attempt counter
+      message(paste("Attempt", attempt, "failed:", e$message))
+      if(grepl("abort", e$message, ignore.case=TRUE)) {
+        cat("Stopping the run as requested.\n")
+        stop("Execution stopped by user.")
+      }
+      if(attempt >= retry_limit) {
+        message(paste("Reached attempt limit."))
+      }
+      return(NULL)  # Return NULL in case of error
+    })
+  }
+
+  return(results)
 }
