@@ -122,7 +122,6 @@
     }
   } else { # else test against included concepts
     if(minCount > 0) { #need to get record count as it is used to determine eligible concepts
-      # recs <- .getPhoebeData(c(conceptList$conceptId)) # get phoebe data on this pass solely for the record counts
       recs <- .getAnyPhoebeData(c(conceptList$conceptId)) # get phoebe data on this pass solely for the record counts
     } else { #don't need to get record counts on this pass as it won't be used to determine eligible concepts
       recs <- data.frame() #set to empty df
@@ -167,7 +166,6 @@
   # read in the basic prompt
 
   if(bucketSize > 1) {
-    # promptUp <- system.file("prompts", "LLM_Prompt_for_PHOEBE.txt", package = "Phenelope")
     promptUp <- system.file("prompts", "LLM_Prompt_for_PHOEBE_generic.txt", package = "Phenelope")
   } else {
     promptUp <- system.file("prompts", "LLM_Prompt_for_PHOEBE_single_generic.txt", package = "Phenelope")
@@ -239,7 +237,6 @@
       concepts$aboveMin[1] <- T # always test the first concept
 
       testCondition <- concepts[startPoint:endPoint, c("conceptId", "conceptName")]
-      # testConceptId <- concepts$conceptId[[conceptUp]]
       baseCondition <- query
 
       updatedLines <- gsub("MAIN_CONCEPT", baseCondition, originalLines)
@@ -255,13 +252,6 @@
       updatedLines <- gsub("EXCLUDED_CONCEPTS", excludedConcepts, updatedLines)
       updatedLines <- gsub("CLINICAL_CONTEXT", clinicalContext, updatedLines)
       updatedLines <- gsub("ADDITIONAL_INFORMATION", additionalInformation, updatedLines)
-
-      # if(domain == "ALL") { #the concept must almost always be a part of the main concept
-      #   proportionValue <- "the vast majority (> 95%)"
-      # } else { #the concept must a proportion of the main concept to be a part of the main concept
-      #   proportionValue <- "a proportion (> 5%)"
-      # }
-      # updatedLines <- gsub("PROPORTION_VALUE", proportionValue, updatedLines)
 
       prompt <- paste(updatedLines, collapse = "\n")
       lastPrompt <- prompt
@@ -317,20 +307,11 @@
             }
             resultsDf$tested <- T
 
-            # resultsDf$suggestedCondition <- testCondition
-            # resultsDf$conceptId <- testConceptId
             resultsDf$mainCondition <- baseCondition
-            # resultsDf$exclusions <- excludedConcepts
+            resultsDf$model <- llmClient$get_model()
             resultsDf$cost <- sprintf("%.5f", llmClient$get_cost())
 
             columnsToFront <- c("suggestedConcept", "conceptId", "mainCondition", "finalAnswer", "rationaleForAnswer", "confidenceLevel")
-
-            ### exclude phoebe recommended concepts with low confidence
-            # if (as.numeric(sub("%", "", resultsDf$confidenceLevel)) < 50 & concepts$phoebe[[conceptUp]] == T &
-            #     resultsDf$finalAnswer == "YES") {
-            #   resultsDf$finalAnswer <- "NO"
-            #   resultsDf$rationaleForAnswer <- paste0("Set to NO: ", resultsDf$rationaleForAnswer)
-            # }
 
             # Rearrange the DataFrame
             resultsDf <- resultsDf |>
@@ -456,10 +437,6 @@
   } else {
     phoebeData <- NULL
   }
-
-  # if(ncol(phoebeData) < 5) {#if bulk did not return the correct number of columns, re-do as single
-  #   phoebeData <- .getPhoebeData(concepts)
-  # }
 
   return(phoebeData)
 }

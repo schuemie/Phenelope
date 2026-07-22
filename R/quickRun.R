@@ -35,16 +35,6 @@
   conceptsToUse <- concepts
   results <- data.frame()
 
-  # read in the basic prompt
-
-  # if(bucketSize > 1) {
-  #   # promptUp <- system.file("prompts", "LLM_Prompt_for_PHOEBE.txt", package = "Phenelope")
-  #   promptUp <- system.file("prompts", "LLM_Prompt_for_PHOEBE_generic.txt", package = "Phenelope")
-  # } else {
-  #   promptUp <- system.file("prompts", "LLM_Prompt_for_PHOEBE_single.txt", package = "Phenelope")
-  # }
-  #
-
   promptUp <- prompt
   originalLines <- readLines(promptUp)
 
@@ -77,13 +67,6 @@
       updatedLines <- gsub("EXCLUDED_CONCEPTS", excludedConcepts, updatedLines)
       updatedLines <- gsub("CLINICAL_CONTEXT", clinicalContext, updatedLines)
       updatedLines <- gsub("ADDITIONAL_INFORMATION", additionalInformation, updatedLines)
-
-      # if(domain == "ALL") { #the concept must almost always be a part of the main concept
-      #   proportionValue <- "the vast majority (> 95%)"
-      # } else { #the concept must a proportion of the main concept to be a part of the main concept
-      #   proportionValue <- "a proportion (> 5%)"
-      # }
-      # updatedLines <- gsub("PROPORTION_VALUE", proportionValue, updatedLines)
 
       prompt <- paste(updatedLines, collapse = "\n")
 
@@ -138,6 +121,7 @@
             resultsDf$tested <- T
 
             resultsDf$mainCondition <- baseCondition
+            resultsDf$model <- llmClient$get_model()
             resultsDf$cost <- sprintf("%.5f", llmClient$get_cost())
 
             columnsToFront <- c("suggestedConcept", "conceptId", "mainCondition", "finalAnswer", "rationaleForAnswer", "confidenceLevel")

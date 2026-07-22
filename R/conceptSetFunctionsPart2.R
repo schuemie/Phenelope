@@ -194,8 +194,6 @@
                                                phoebeExclusions = phoebeExclusions,
                                                quickRun = FALSE)
 
-    # finalConceptSet <- conceptSet[[2]]
-    # finalConceptSet <- finalConceptSet[finalConceptSet$items$concept$DOMAIN_ID %in% domains]
   } else { #too large to test - send message and use descendants only
     message(paste0("The number of concepts to test (", recordCount, ") exceeds the threshold of 2000.  Producing a concept set of concepts plus descendants"))
     finalConceptSet <- .createJsonforConceptsPlusDescendants(conceptIds,
@@ -203,7 +201,6 @@
                                                              cdmDatabaseSchema = cdmDatabaseSchema)$expression
   }
 
-  # return(conceptSet)
   return(finalConceptSet)
 }
 
@@ -291,18 +288,11 @@ WHERE concept_id IN (@concept_ids)
     )
   })
 
-  # concept_set <- list(
-  #   id = NULL,
-  #   name = paste0("ConceptSet_with_descendants_", Sys.Date()),
-  #   expression = list(items = items)
-  # )
-
   concept_set <- list(
     items = items
   )
 
   # convert to JSON (NA -> null)
-  # json_string <- RJSONIO::toJSON(concept_set, auto_unbox = TRUE, pretty = TRUE, na = "null")
   json_string <- jsonlite::toJSON(concept_set, pretty = TRUE, simplifyVector = FALSE, auto_unbox = TRUE)
 
 
@@ -385,7 +375,6 @@ WHERE concept_id IN (@concept_ids)
   params <- list(
     q = term,
     domain_id = paste(domains, collapse = ","),
-    # standard_concept = "S",
     vocabulary_id = vocabularyId,
     standard_concept = standardConcept,
     limit = limit
@@ -525,7 +514,6 @@ WHERE concept_id IN (@concept_ids)
                                    conceptClasses = classes,
                                    limit = vectorSearchSize)
 
-    # conceptList <- seeds[seeds$conceptClassId %in% c(classes),]
     conceptList <- seeds
 
     promptToUse <- system.file("prompts", "LLM_Prompt_for_PHOEBE_generic_sensitive.txt", package = "Phenelope")

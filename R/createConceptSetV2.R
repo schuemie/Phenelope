@@ -146,7 +146,6 @@ createConceptSet <- function(conceptName,
   }
 
   # create recommended concept set  list(s) based on number of iterations requested
-  message("\nUsing model: ", llmClient$get_model(), "\n")
   for (tryNumber in 1:tries) {
     message("Try = ", tryNumber, " out of ", tries)
     if (file.exists(file.path(outputDirectory, paste0(conditionForFiles, tryNumber, ".csv")))) {
@@ -251,6 +250,7 @@ createConceptSet <- function(conceptName,
                                                      additionalInformation = additionalInformation,
                                                      clinicalContext = clinicalContext,
                                                      bucketSize = bucketSize)
+      return(llmResults)
     }
 
     # save to dataframe as a csv
