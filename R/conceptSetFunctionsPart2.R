@@ -641,13 +641,13 @@ getDrugClass <- function(drugName) {
 }
 
 .getDrugConceptSet <- function(searchString,
-                              llmClientReasoning,
-                              llmClientNonReasoning,
-                              connectionDetails,
-                              cdmDatabaseSchema,
-                              additionalInformation = "",
-                              outputDirectory,
-                              clinicalContext = "") {
+                               llmClientReasoning,
+                               llmClientNonReasoning,
+                               connectionDetails,
+                               cdmDatabaseSchema,
+                               additionalInformation = "",
+                               outputDirectory,
+                               clinicalContext = "") {
 
   connection3 <- suppressMessages(DatabaseConnector::connect(connectionDetails = connectionDetails))
   on.exit(DatabaseConnector::disconnect(connection3))
@@ -778,4 +778,29 @@ getDrugClass <- function(drugName) {
   }
 
   return(llmConceptSet)
+}
+
+.getAllDomains <- function (conceptList, connectionDetails, cdmDatabaseSchema) {
+
+  connection <- suppressMessages(DatabaseConnector::connect(connectionDetails = connectionDetails))
+  on.exit(DatabaseConnector::disconnect(connection))
+
+  excludedVocabularies <- ""
+
+  sqlFilename <- "FullConcepts.sql"
+  conceptList <- conceptList[!is.na(conceptList)]
+  sql <- SqlRender::loadRenderTranslateSql(
+    sqlFilename = sqlFilename,
+    packageName = "Phenelope",
+    dbms = connectionDetails$dbms,
+    cdm_database_schema = cdmDatabaseSchema,
+    concept_list = paste(conceptList, collapse = ", "),
+    excludedVocabularies = paste(sprintf("'%s'", excludedVocabularies), collapse = ", ")
+  )
+
+  conceptList <- DatabaseConnector::querySql(connection = connection, sql = sql, snakeCaseToCamelCase = TRUE)
+
+  domains <- unique(conceptList$domainId)
+
+  return(domains)
 }

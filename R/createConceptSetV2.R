@@ -329,6 +329,14 @@ createConceptSet <- function(conceptName,
     )
   }
 
+  #get a list of the domains included in the concept set
+  allDomains <- .getAllDomains(conceptList = c(joinedDfAll$conceptId[joinedDfAll$finalAnswer == "YES"]),
+                        connectionDetails = connectionDetails,
+                        cdmDatabaseSchema = cdmDatabaseSchema)
+
+  domainList <- data.frame(domainId = allDomains, stringsAsFactors = FALSE)
+  write.csv(domainList, file.path(outputDirectory, "domains.csv"), row.names = FALSE, quote = TRUE)
+
   # Combine responses into one column and count "YES" responses
   countDf <- joinedDf |>
     tidyr::pivot_longer(cols = starts_with("finalAnswer"), names_to = "Source", values_to = "finalAnswer") |>
