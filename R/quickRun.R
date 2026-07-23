@@ -45,7 +45,7 @@
   cost <- 0
   llmClient$set_turns(list()) # Reset the chat
 
-  concepts$conceptName <- gsub("[\\[\\]]", " ", concepts$conceptName) #remove any [ or ] from name (interferes with json structure)
+  concepts$conceptName <- gsub("\\[|\\]", " ", concepts$conceptName) #remove any [ or ] from name (interferes with json structure)
   if (nrow(concepts) != 0) {
     startPoint <- 1
     endPoint <- min(bucketSize, nrow(concepts))

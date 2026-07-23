@@ -666,11 +666,20 @@ getDrugClass <- function(drugName) {
     passes <- 5
     startNumber <- 100
     nextNumber <- 50
+    llmSearchString <- searchString
+
+    if(drugClass$singleGroupDrug == "SINGLE") { #can reduce level of search for a single drug search
+      passes <- 3
+      startNumber <- 5
+      nextNumber <- 5
+      llmSearchString <- drugClass$singleGroupName
+    }
+
     {
       fullDrugList <- NULL
       cat(paste0("Finding list of drugs for ", searchString, "\n"))
       for(passUp in 1:passes) { # 3 passes for completeness sake
-        updatedLines <- gsub("SEARCH_TERM", searchString, originalLines)
+        updatedLines <- gsub("SEARCH_TERM", llmSearchString, originalLines)
 
         updatedLines <- gsub("CURRENT_LIST", paste0(fullDrugList$drugName, collapse = "; "), updatedLines)
         updatedLines <- gsub("START_NUMBER", startNumber, updatedLines)
@@ -699,6 +708,7 @@ getDrugClass <- function(drugName) {
       fullDrugList <- fullDrugList[, names(fullDrugList) != "cost"]
       drugList <- unique(fullDrugList)
     }
+    utils::write.csv(fullDrugList, file.path(outputDirectory, paste0(searchString, "_from_LLM.csv")), row.names = F)
 
     limit <- 200
     standardConceptCode <- "S"
@@ -728,6 +738,11 @@ getDrugClass <- function(drugName) {
         conceptList <- rbind(conceptList, seeds)
       }
     }
+
+    if(length(conceptList)) {
+      utils::write.csv(conceptList, file.path(outputDirectory, paste0(searchString, "_from_embVectors.csv")), row.names = F)
+    }
+
 
     conceptList <- conceptList[,c("conceptId", "conceptName", "domainId", "vocabularyId", "conceptClassId", "standardConcept",
                                   "conceptCode")]

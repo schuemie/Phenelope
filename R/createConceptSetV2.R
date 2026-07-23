@@ -162,8 +162,7 @@ createConceptSet <- function(conceptName,
     searchString <- gsub(" codes", "", conceptName) #strip off the suffix
 
     if(quickRun == FALSE) {#need to go through the multi-stage process rather than a simple test
-      #TODO - return concepts plus desc concept set when too big; return empty concept set
-
+      #NOTE: currently not using classes - leaving them in as placeholder for future
       if(domainToUse %in% c("CONDITION")) { #full analysis with phoebe, descendants for conditions and observations
         #get seed concept ids from hecate
         domains <- c("Condition", "Observation")
@@ -183,9 +182,30 @@ createConceptSet <- function(conceptName,
 
       } else if(domainToUse %in% c("VISIT")) {
         #get seed concept ids from hecate
-        domains <- c("Visit")
+        domains <- c("Visit", "Provider", "Procedure", "Observation")
         classes <- c("Visit")
         phoebeExclusions <- c("Ontology-parent") #not valuable for visits
+
+        #test to see if it is for a specialty visit
+        ellmerTypeObject <- ellmer::type_array(ellmer::type_object(
+          visitName = ellmer::type_string(),
+          yesNo = ellmer::type_enum(values = c("YES","NO")),
+          specialtyName = ellmer::type_string()
+        ))
+
+        prompt <- paste0("Does ", searchString, " imply a visit involving a clinical specialist? ",
+                         "If yes, what is the name of the clinical specialty? ",
+                         "  {
+                            \"visitName\": \"Name of visit code in question\",
+                            \"yesNo\": \"YES or NO\",
+                            \"specialtyName\": \"Name of specialty\"
+                            }")
+
+        specialty <- queryLLM(llmClient = llmClient, prompt = prompt, ellmerTypeObject = ellmerTypeObject)
+
+        if(specialty$yesNo == "YES") { #this will ensure that the specialty provider and the visit type is included
+          searchString <- paste0(searchString, " (specialty)")
+        }
 
       } else if(domainToUse %in% c("DEVICE")) {
         #get seed concept ids from hecate
