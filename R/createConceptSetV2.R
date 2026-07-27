@@ -54,6 +54,7 @@
 #' @param excludedVocabularies      Vocabularies not to be included in the condensing function
 #' @param condenseConceptSet      True/False to perform condenser function
 #' @param bucketSize          Number of concepts for LLM to analyze in one pass - Note: larger number may reduce accuracy of evaluation
+#' @param standardOnly        T/F - if true, only allow standard concepts, if false, any concepts
 #' @param quickRun    T/F - if true, will simply test the concepts in the concept list, i.e., no PHOEBE, descendants
 #' @return Final results set as a list of two elements 1) a data frame of the LLM results for each tested concept
 #'                                                     and 2) a JSON object ready for porting into ATLAS if successful, FALSE if unsuccessful.
@@ -76,6 +77,7 @@ createConceptSet <- function(conceptName,
                              condenseConceptSet = TRUE,
                              clinicalContext = "any clinical context",
                              bucketSize = 1,
+                             standardOnly = TRUE,
                              quickRun = FALSE) {
   errorMessages <- checkmate::makeAssertCollection()
   checkmate::assertClass(connectionDetails, "ConnectionDetails", add = errorMessages)
@@ -109,6 +111,7 @@ createConceptSet <- function(conceptName,
   checkmate::assertCharacter(clinicalContext, len = 1, null.ok = TRUE, add = errorMessages)
   checkmate::assertLogical(condenseConceptSet, add = errorMessages)
   checkmate::assertNumeric(bucketSize, add = errorMessages)
+  checkmate::assertLogical(standardOnly, add = errorMessages)
   checkmate::assertLogical(quickRun, add = errorMessages)
 
   checkmate::reportAssertions(collection = errorMessages)
@@ -246,7 +249,8 @@ createConceptSet <- function(conceptName,
                                     conditionForFiles = conditionForFiles,
                                     tryNumber = tryNumber,
                                     outputDirectory = outputDirectory,
-                                    phoebeExclusions = phoebeExclusions)
+                                    phoebeExclusions = phoebeExclusions,
+                                    standardOnly = standardOnly)
 
       }
 

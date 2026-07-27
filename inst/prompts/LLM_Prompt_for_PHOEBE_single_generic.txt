@@ -50,6 +50,10 @@ S3) If SUGGESTED_CONCEPT_SHORT is a subtype of MAIN_CONCEPT and in the clinical 
 Example:   a proposed concept of "Photodynamic therapy of skin" ALWAYS involves photo therapy, albeit a special form of it, so it should be included in a specific concept of "phototherapy procedure" even though it is a special form (using drugs in addition to light).
 S4) If SUGGESTED_CONCEPT_SHORT is a synonym, subtype, or exclusive manifestation of any of EXCLUDED_CONCEPTS (i.e., only happens with EXCLUDED_CONCEPTS), the answer is NO.
 S5) If SUGGESTED_CONCEPT_SHORT is not possible within the clinical context, CLINICAL_CONTEXT, the answer is NO.
+S6) If specific concept(s) has an OR clause, the proposed concept should be included if it is correct for EITHER of the parts of the specific condition.
+Example: For the specific concept "leukocytosis or neutrophilia condition", include any proposed concept that is correct for leukocytosis OR neutrophilia.
+S7) If specific concept(s) has an AND clause, the proposed concept should be included if it is correct for EITHER of the parts of the specific condition.
+Example: For the specific concept "nausea and vomiting condition", include any proposed concept that is correct for nausea OR vomiting.
 
 Give a JSON-structured summary for the following (DO NOT ADD ANY OTHER NON-JSON FORMATTED TEXT):
 {

@@ -156,6 +156,7 @@
                 "on ca.descendant_concept_id  = c.concept_id ",
                 "where ca.ancestor_concept_id in (", paste0(c(conceptIds), collapse = ","), ") ",
                 "and c.domain_id in (", paste0("'", domains, "'", collapse = "," ), ") ",
+                "and c.vocabulary_id not in (", paste0("'", excludedVocabularies, "'", collapse = "," ), ") ",
                 # "and c.concept_class_id in (", paste0("'", conceptClasses, "'", collapse = "," ), ") ",
                 "and c.standard_concept = \"S\";")
 
@@ -195,10 +196,23 @@
                                                quickRun = FALSE)
 
   } else { #too large to test - send message and use descendants only
-    message(paste0("The number of concepts to test (", recordCount, ") exceeds the threshold of 2000.  Producing a concept set of concepts plus descendants"))
-    finalConceptSet <- .createJsonforConceptsPlusDescendants(conceptIds,
-                                                             connectionDetails = connectionDetails,
-                                                             cdmDatabaseSchema = cdmDatabaseSchema)$expression
+    message(paste0("The number of concepts to test (", recordCount, ") exceeds the threshold of 5000.  Producing a concept set of concepts plus descendants"))
+
+    finalConceptSet <- NULL
+    finalConceptSet$conceptId <- conceptIds
+    finalConceptSet$suggestedConcept <- ""
+    finalConceptSet$mainCondition <- conceptName
+    finalConceptSet$finalAnswer <- "YES"
+    finalConceptSet$rationaleForAnswer <- ""
+    finalConceptSet$confidenceLevel <- ""
+    finalConceptSet$excludedConcepts <- ""
+    finalConceptSet$proposedInExcluded <- ""
+    finalConceptSet$tested <- TRUE
+    finalConceptSet$model <- ""
+    finalConceptSet$cost <- ""
+    finalConceptSet$recordCount <- 0
+
+    finalConceptSet <- data.frame(finalConceptSet)
   }
 
   return(finalConceptSet)
@@ -367,8 +381,8 @@ WHERE concept_id IN (@concept_ids)
 .vectorSearch <- function(term,
                           domains,
                           conceptClasses = NULL,
-                          vocabularyId,
-                          standardConcept,
+                          vocabularyId = NULL,
+                          standardConcept = NULL,
                           limit = 10,
                           maxRetries = 3,
                           waitTime = 2) {
@@ -495,7 +509,8 @@ WHERE concept_id IN (@concept_ids)
                           conditionForFiles,
                           tryNumber = 1,
                           outputDirectory,
-                          phoebeExclusions) {
+                          phoebeExclusions,
+                          standardOnly) {
 
   if (file.exists(file.path(outputDirectory, paste0(conditionForFiles,
                                                     "_from_embVectors.csv")))) {
@@ -509,11 +524,17 @@ WHERE concept_id IN (@concept_ids)
                                                                           "_from_embVectors.csv")))
   } else {
     #get seed concepts from hecate
-    seeds <- .vectorSearchStandard(term = searchString,
-                                   domains = domains,
-                                   conceptClasses = classes,
-                                   limit = vectorSearchSize)
-
+    if(standardOnly == TRUE) {
+      seeds <- .vectorSearchStandard(term = searchString,
+                                     domains = domains,
+                                     conceptClasses = classes,
+                                     limit = vectorSearchSize)
+    } else {
+      seeds <- .vectorSearch(term = searchString,
+                             domains = domains,
+                             # conceptClasses = classes,
+                             limit = vectorSearchSize)
+    }
     conceptList <- seeds
 
     promptToUse <- system.file("prompts", "LLM_Prompt_for_PHOEBE_generic_sensitive.txt", package = "Phenelope")
@@ -803,4 +824,24 @@ getDrugClass <- function(drugName) {
   domains <- unique(conceptList$domainId)
 
   return(domains)
+}
+
+#' @export
+resolveConceptSet <- function(conceptSet, #in list form
+                              connectionDetails,
+                              cdmDatabaseSchema) {
+  #turn a concept set in json list form into a list of all included concepts
+  connection <- suppressMessages(DatabaseConnector::connect(connectionDetails = connectionDetails))
+  on.exit(DatabaseConnector::disconnect(connection))
+
+  json_txt <- paste(jsonlite::toJSON(conceptSet,
+                                     pretty = TRUE,
+                                     simplifyVector = FALSE,
+                                     auto_unbox = TRUE), collapse = "\n")
+
+  sql <- CirceR::buildConceptSetQuery(json_txt)
+  sql <- SqlRender::render(sql = sql, vocabulary_database_schema = cdmDatabaseSchema)
+  conceptIdList <- DatabaseConnector::querySql(connection = connection, sql, snakeCaseToCamelCase = TRUE)
+
+  return(conceptIdList)
 }

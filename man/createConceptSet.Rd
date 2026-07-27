@@ -23,6 +23,7 @@ createConceptSet(
   condenseConceptSet = TRUE,
   clinicalContext = "any clinical context",
   bucketSize = 1,
+  standardOnly = TRUE,
   quickRun = FALSE
 )
 }
@@ -76,6 +77,8 @@ are desired for the concepts, for example, "only in women"}
 "following surgery" would include concepts whose name indicates it happened post-surgery.}
 
 \item{bucketSize}{Number of concepts for LLM to analyze in one pass - Note: larger number may reduce accuracy of evaluation}
+
+\item{standardOnly}{T/F - if true, only allow standard concepts, if false, any concepts}
 
 \item{quickRun}{T/F - if true, will simply test the concepts in the concept list, i.e., no PHOEBE, descendants}
 }

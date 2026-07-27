@@ -62,6 +62,7 @@
   )
 
   conceptList <- DatabaseConnector::querySql(connection = connection2, sql = sql, snakeCaseToCamelCase = TRUE)
+
   if (nrow(conceptList) != 0) {
     conceptList$phoebe <- F
   }
