@@ -335,8 +335,9 @@ createConceptSet <- function(conceptName,
 
   #get a list of the domains included in the concept set
   allDomains <- .getAllDomains(conceptList = c(joinedDfAll$conceptId[joinedDfAll$finalAnswer == "YES"]),
-                        connectionDetails = connectionDetails,
-                        cdmDatabaseSchema = cdmDatabaseSchema)
+                               connectionDetails = connectionDetails,
+                               cdmDatabaseSchema = cdmDatabaseSchema,
+                               excludedVocabularies = excludedVocabularies)
 
   domainList <- data.frame(domainId = allDomains, stringsAsFactors = FALSE)
   write.csv(domainList, file.path(outputDirectory, "domains.csv"), row.names = FALSE, quote = TRUE)
@@ -360,75 +361,84 @@ createConceptSet <- function(conceptName,
   conceptSet <- jsonlite::fromJSON(Capr::as.json(conceptSet))
   finalConceptSet <- conceptSet #set this as the the final if no condensing is successfully performed
 
-  if(csConceptPlusDescendants == FALSE) { #produce full concept set
-    # initial write of code list
-    write(
-      jsonlite::toJSON(conceptSet,
-                       simplifyVector = FALSE,
-                       auto_unbox = TRUE
-      ),
-      file = file.path(outputDirectory, paste0(conditionForFiles, ".json"))
+  if (file.exists(file.path(outputDirectory, paste0(conditionForFiles, ".json")))) {
+    # skip condensing concept set if json file exists
+    message(
+      "File ",
+      file.path(outputDirectory, paste0(conditionForFiles, ".json")),
+      " exists...skipping condensing concept set."
     )
-  } else { #produce the final concept set of all concepts plus descendants
-    if(length(finalConceptSet) > 0) {
-      finalConceptSet <- .createJsonforConceptsPlusDescendants(conceptIds = finalSet,
-                                                               connectionDetails = connectionDetails,
-                                                               cdmDatabaseSchema = cdmDatabaseSchema)
-
-      write(jsonlite::toJSON(finalConceptSet, pretty = TRUE, simplifyVector = FALSE, auto_unbox = TRUE),
-            file = file.path(outputDirectory, paste0(conditionForFiles, ".json"))
+  } else { #condense concept set, if needed
+    if(csConceptPlusDescendants == FALSE) { #produce full concept set
+      # initial write of code list
+      write(
+        jsonlite::toJSON(conceptSet,
+                         simplifyVector = FALSE,
+                         auto_unbox = TRUE
+        ),
+        file = file.path(outputDirectory, paste0(conditionForFiles, ".json"))
       )
-      message("The artifacts from the process may be found at: ", file.path(outputDirectory))
+    } else { #produce the final concept set of all concepts plus descendants
+      if(length(finalConceptSet) > 0) {
+        finalConceptSet <- .createJsonforConceptsPlusDescendants(conceptIds = finalSet,
+                                                                 connectionDetails = connectionDetails,
+                                                                 cdmDatabaseSchema = cdmDatabaseSchema)
 
+        write(jsonlite::toJSON(finalConceptSet, pretty = TRUE, simplifyVector = FALSE, auto_unbox = TRUE),
+              file = file.path(outputDirectory, paste0(conditionForFiles, ".json"))
+        )
+        message("The artifacts from the process may be found at: ", file.path(outputDirectory))
+
+      }
     }
-  }
 
-  if(condenseConceptSet == TRUE) { #only condense concept set if requested
-    retryLimit <- 10 # Maximum number of retries
-    attempt <- 0 # Initial attempt counter
-    success <- FALSE # Flag to indicate success
+    if(condenseConceptSet == TRUE) { #only condense concept set if requested
+      retryLimit <- 10 # Maximum number of retries
+      attempt <- 0 # Initial attempt counter
+      success <- FALSE # Flag to indicate success
 
-    while (attempt <= retryLimit && !success) { # llm with mislabel column headers occasionally - usually fixed with a re-try
-      tryCatch(
-        {
-          attempt <- attempt + 1 # Increment the attempt count
-          # Fetch data for concept set
-          conceptSetData <- fetchCondenserConceptSetData(
-            conceptSetExpression = conceptSet,
-            connection = connection,
-            cdmDatabaseSchema = cdmDatabaseSchema,
-            tempEmulationSchema = tempEmulationSchema,
-            excludedVocabularies = excludedVocabularies
-          )
+      while (attempt <= retryLimit && !success) { # llm with mislabel column headers occasionally - usually fixed with a re-try
+        tryCatch(
+          {
+            attempt <- attempt + 1 # Increment the attempt count
+            # Fetch data for concept set
+            conceptSetData <- fetchCondenserConceptSetData(
+              conceptSetExpression = conceptSet,
+              connection = connection,
+              cdmDatabaseSchema = cdmDatabaseSchema,
+              tempEmulationSchema = tempEmulationSchema,
+              excludedVocabularies = excludedVocabularies
+            )
 
-          # Main condenser function ------------------------------------------------------
-          condensedConceptSet <- condenseConceptSet(conceptSetData)
-          write(jsonlite::toJSON(condensedConceptSet, pretty = TRUE, simplifyVector = FALSE, auto_unbox = TRUE),
-                file = file.path(outputDirectory, paste0(conditionForFiles, ".json"))
-          )
-          finalConceptSet <- condensedConceptSet #set this as final if condensing was successfully performed
-          message("The artifacts from the process may be found at: ", file.path(outputDirectory))
-
-          success <- TRUE
-        },
-        error = function(e) {
-          # Handle the error: print a message and increment the attempt counter
-          message(paste("Attempt", attempt, "failed:", e$message))
-          if (grepl("abort", e$message, ignore.case = TRUE)) {
-            cat("Stopping the run as requested.\n")
-            stop("Execution stopped by user.")
-          }
-          if (attempt >= retryLimit) {
-            message(paste("Reached attempt limit."))
-            cat("Stopping the run as requested.\n")
-
+            # Main condenser function ------------------------------------------------------
+            condensedConceptSet <- condenseConceptSet(conceptSetData)
+            write(jsonlite::toJSON(condensedConceptSet, pretty = TRUE, simplifyVector = FALSE, auto_unbox = TRUE),
+                  file = file.path(outputDirectory, paste0(conditionForFiles, ".json"))
+            )
+            finalConceptSet <- condensedConceptSet #set this as final if condensing was successfully performed
             message("The artifacts from the process may be found at: ", file.path(outputDirectory))
 
-            stop("Execution stopped by user.")
+            success <- TRUE
+          },
+          error = function(e) {
+            # Handle the error: print a message and increment the attempt counter
+            message(paste("Attempt", attempt, "failed:", e$message))
+            if (grepl("abort", e$message, ignore.case = TRUE)) {
+              cat("Stopping the run as requested.\n")
+              stop("Execution stopped by user.")
+            }
+            if (attempt >= retryLimit) {
+              message(paste("Reached attempt limit."))
+              cat("Stopping the run as requested.\n")
+
+              message("The artifacts from the process may be found at: ", file.path(outputDirectory))
+
+              stop("Execution stopped by user.")
+            }
+            return(FALSE) # Return FALSE in case of error
           }
-          return(FALSE) # Return FALSE in case of error
-        }
-      )
+        )
+      }
     }
   }
 

@@ -6,6 +6,7 @@ baseUrl <- "https://epi.jnj.com:8443/WebAPI"
 conceptSetNamePrefix <- "[LLM Concept Set]"
 
 #set up your LLM client - create the LLM client for one model below
+#need reasoning model, such as o3, but can add non-reasoning model which will speed some processes
 llmClient <- ellmer::chat_azure_openai(
   endpoint = gsub("/openai/deployments.*", "", keyring::key_get("genai_o3_endpoint")),
   api_version = "2024-12-01-preview",
@@ -15,7 +16,6 @@ llmClient <- ellmer::chat_azure_openai(
 
 llmClientReasoning <- llmClient
 
-# The 4o model is recommended
 llmClient <- ellmer::chat_azure_openai(
   endpoint = gsub("/openai/deployments.*", "", keyring::key_get("genai_gpt4o_endpoint")),
   api_version = "2023-03-15-preview",
@@ -31,7 +31,7 @@ dbConnectionString <- paste("jdbc:databricks://",
                             Sys.getenv("DATABRICKS_HOST"),
                             ":443/default;transportMode=http;ssl=1;AuthMech=3;httpPath=",
                             Sys.getenv("DATABRICKS_HTTP_PATH"),
-                            ";EnableArrow=0;",sep='')
+                            sep='')
 
 ccaeConnection <- list(cdmDatabaseSchema = paste0("merative_ccae.cdm_merative_ccae_v", currentCcaeVersion),
                        connectionDetails = DatabaseConnector::createConnectionDetails(dbms = "spark",
@@ -44,7 +44,6 @@ database <- ccaeConnection
 #HELLPsyndrome is a good one to test BUT change the conceptSetName and outputFolder first
 HELLPsyndrome <- list(condition = "HELLP syndrome", #important - this will determine what llm uses as the main condition
                       excludedConcepts = "none", #text list of conditions that should be excluded
-                      excludeCauses = F, #set to true if you don't want to include causes in the concepts (usually left as F)
                       belowMinimumCountApproach = "EXCLUDE ALL", #how to test/not test concepts below minimum counts - important for cancers
                       #choose: "TEST ALL" to test all the concepts below the minimum count
                       #"TEST PHOEBE" to test only the ones below the minimum count AND recommended by PHOEBE

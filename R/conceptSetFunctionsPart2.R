@@ -584,6 +584,7 @@ WHERE concept_id IN (@concept_ids)
   }
 }
 
+#' @export
 getDrugClass <- function(drugName) {
   ellmerTypeObject <- ellmer::type_array(ellmer::type_object(
     drugName = ellmer::type_string(),
@@ -595,6 +596,8 @@ getDrugClass <- function(drugName) {
     drugStrengthName = ellmer::type_string(),
     drugBrandYesNo = ellmer::type_enum(values = c("YES","NO")),
     drugBrandName = ellmer::type_string(),
+    multipleDrugYesNo = ellmer::type_enum(values = c("YES","NO")),
+    multipleDrugNames = ellmer::type_string(),
     singleGroupDrug = ellmer::type_enum(values = c("SINGLE","GROUP")),
     singleGroupName = ellmer::type_string(),
     indicationSpecificYesNo = ellmer::type_enum(values = c("YES","NO")),
@@ -615,7 +618,8 @@ getDrugClass <- function(drugName) {
   if(drugNameInformation$routeOfAdministrationYesNo == "NO" &
      drugNameInformation$dosageFormYesNo == "NO" &
      drugNameInformation$drugStrengthYesNo ==  "NO" &
-     drugNameInformation$drugBrandYesNo ==  "NO" ) {
+     drugNameInformation$drugBrandYesNo ==  "NO" &
+     drugNameInformation$multipleDrugYesNo == "NO") {
     class <- "Ingredient"
   } else if(drugNameInformation$routeOfAdministrationYesNo == "YES" &
             drugNameInformation$dosageFormYesNo == "NO" &
@@ -652,6 +656,8 @@ getDrugClass <- function(drugName) {
             drugNameInformation$drugStrengthYesNo ==  "YES" &
             drugNameInformation$drugBrandYesNo ==  "YES" ) {
     class <- "Branded Drug, Quant Branded Drug, Marketed Product"
+  } else if(drugNameInformation$multipleDrugYesNo == "YES")  { #best fit for multiple active ingredients
+    class <- "Clinical Dose Group"
   } else {
     class <- "Unknown"
   }
@@ -673,13 +679,22 @@ getDrugClass <- function(drugName) {
   connection3 <- suppressMessages(DatabaseConnector::connect(connectionDetails = connectionDetails))
   on.exit(DatabaseConnector::disconnect(connection3))
 
-  promptUp <- system.file("prompts", "createDrugList.txt", package = "Phenelope")
-  originalLines <- readLines(promptUp)
-
+  #get drug class, e.g., ingredient, drug product, etc
   domains <- c("Drug")
   drugClass <- getDrugClass(searchString)
 
-  {
+  if (file.exists(file.path(outputDirectory, paste0(searchString, "_from_LLM.csv")))) {
+    # found the llm derived concepts, skip this part
+    message(
+      "File ",
+      file.path(outputDirectory, paste0(searchString, "_from_LLM.csv")),
+      " exists...skipping to next part of analysis."
+    )
+    fullDrugList <- utils::read.csv(file.path(outputDirectory, paste0(searchString, "_from_LLM.csv")))
+  } else { #get the drugs from llm
+    promptUp <- system.file("prompts", "createDrugList.txt", package = "Phenelope")
+    originalLines <- readLines(promptUp)
+
     ellmerTypeObject <- ellmer::type_array(ellmer::type_object(
       term = ellmer::type_string(),
       drugName = ellmer::type_string()))
@@ -696,52 +711,62 @@ getDrugClass <- function(drugName) {
       llmSearchString <- drugClass$singleGroupName
     }
 
-    {
-      fullDrugList <- NULL
-      cat(paste0("Finding list of drugs for ", searchString, "\n"))
-      for(passUp in 1:passes) { # 3 passes for completeness sake
-        updatedLines <- gsub("SEARCH_TERM", llmSearchString, originalLines)
+    fullDrugList <- NULL
+    cat(paste0("Finding list of drugs for ", searchString, "\n"))
+    for(passUp in 1:passes) { # 3 passes for completeness sake
+      updatedLines <- gsub("SEARCH_TERM", llmSearchString, originalLines)
 
-        updatedLines <- gsub("CURRENT_LIST", paste0(fullDrugList$drugName, collapse = "; "), updatedLines)
-        updatedLines <- gsub("START_NUMBER", startNumber, updatedLines)
-        updatedLines <- gsub("NEXT_NUMBER", nextNumber, updatedLines)
+      updatedLines <- gsub("CURRENT_LIST", paste0(fullDrugList$drugName, collapse = "; "), updatedLines)
+      updatedLines <- gsub("START_NUMBER", startNumber, updatedLines)
+      updatedLines <- gsub("NEXT_NUMBER", nextNumber, updatedLines)
 
-        prompt <- paste(updatedLines, collapse = "\n")
+      prompt <- paste(updatedLines, collapse = "\n")
 
-        start <- Sys.time()
-        drugList <- queryLLM(llmClient = llmClientReasoning, prompt = prompt, ellmerTypeObject = ellmerTypeObject)
-        end <- Sys.time()
-        elapsedSecs <- as.numeric(difftime(end, start, units = "secs"))
-        if(passUp == 1) {initTime <- elapsedSecs}
+      start <- Sys.time()
+      drugList <- queryLLM(llmClient = llmClientReasoning, prompt = prompt, ellmerTypeObject = ellmerTypeObject)
+      end <- Sys.time()
+      elapsedSecs <- as.numeric(difftime(end, start, units = "secs"))
+      if(passUp == 1) {initTime <- elapsedSecs}
 
-        if(ncol(drugList) > 1) {
-          drugList$passNumber <- passUp
-          fullDrugList <- rbind(fullDrugList, drugList[, names(drugList) != "cost"])
-        }
-
-        fullDrugList <- unique(fullDrugList[, names(fullDrugList) != "cost"])
-        # message (paste0("Search ", passUp, " of ", passes, " - Total drugs: ", nrow(fullDrugList)))
-        cat(paste0("\rSearch ", passUp, " of ", passes, " - Total drugs: ", nrow(fullDrugList), "..."))
-
+      if(ncol(drugList) > 1) {
+        drugList$passNumber <- passUp
+        fullDrugList <- rbind(fullDrugList, drugList[, names(drugList) != "cost"])
       }
-      cat(paste0("done\n"))
 
-      fullDrugList <- fullDrugList[, names(fullDrugList) != "cost"]
-      drugList <- unique(fullDrugList)
+      fullDrugList <- unique(fullDrugList[, names(fullDrugList) != "cost"])
+      # message (paste0("Search ", passUp, " of ", passes, " - Total drugs: ", nrow(fullDrugList)))
+      cat(paste0("\rSearch ", passUp, " of ", passes, " - Total drugs: ", nrow(fullDrugList), "..."))
+
     }
+    cat(paste0("done\n"))
+
+    fullDrugList <- fullDrugList[, names(fullDrugList) != "cost"]
+
     utils::write.csv(fullDrugList, file.path(outputDirectory, paste0(searchString, "_from_LLM.csv")), row.names = F)
+  }
 
-    limit <- 200
-    standardConceptCode <- "S"
+  drugList <- unique(fullDrugList)
 
-    if(drugClass$drugClass %in% c("Clinical Dose Group", "Branded Dose Group")) {
-      standardConceptCode <- "C"
-    }
+  limit <- 200
+  standardConceptCode <- "S"
 
-    if(drugClass$drugClass %in% c("Ingredient")) {
-      limit <- 1
-    }
+  if(drugClass$drugClass %in% c("Clinical Dose Group", "Branded Dose Group")) {
+    standardConceptCode <- "C"
+  }
 
+  if(drugClass$drugClass %in% c("Ingredient")) {
+    limit <- 1
+  }
+
+  if (file.exists(file.path(outputDirectory, paste0(searchString, "_from_embVectors.csv")))) {
+    # found the hecate derived concepts, skip this part
+    message(
+      "File ",
+      file.path(outputDirectory, paste0(searchString, "_from_embVectors.csv")),
+      " exists...skipping to next part of analysis."
+    )
+    conceptList <- utils::read.csv(file.path(outputDirectory, paste0(searchString, "_from_embVectors.csv")))
+  } else { #get the drugs concept id from hecate
     conceptList <- NULL
     for(drugUp in seq_len(nrow(drugList))) {
       cat(paste0("\rFinding concept Ids for drug ", drugUp, " of ", nrow(drugList)))
@@ -763,8 +788,18 @@ getDrugClass <- function(drugName) {
     if(length(conceptList)) {
       utils::write.csv(conceptList, file.path(outputDirectory, paste0(searchString, "_from_embVectors.csv")), row.names = F)
     }
+  }
 
 
+  if (file.exists(file.path(outputDirectory, paste0(searchString, "1.csv")))) {
+    # found the llm adjudicated concepts, skip this part
+    message(
+      "File ",
+      file.path(outputDirectory, paste0(searchString, "1.csv")),
+      " exists...skipping to next part of analysis."
+    )
+    llmConceptSet <- utils::read.csv(file.path(outputDirectory, paste0(searchString, "1.csv")))
+  } else { #get llm to adjudicate the concepts
     conceptList <- conceptList[,c("conceptId", "conceptName", "domainId", "vocabularyId", "conceptClassId", "standardConcept",
                                   "conceptCode")]
     conceptList <- unique(conceptList)
@@ -789,24 +824,25 @@ getDrugClass <- function(drugName) {
       message(paste0("No concept Ids found for ", searchString, " perhaps try a different drug name."))
       return(NULL)
     }
+  }
 
-    llmApprovedConcepts <- llmConceptSet[llmConceptSet$finalAnswer == "YES",]
+  llmApprovedConcepts <- llmConceptSet[llmConceptSet$finalAnswer == "YES",]
 
-    if(length(llmApprovedConcepts) == 0) {
-      message(paste0("No LLM approved concept Ids found for ", searchString, " perhaps try a different drug name."))
-      return(NULL)
-    }
+  if(length(llmApprovedConcepts) == 0) {
+    message(paste0("No LLM approved concept Ids found for ", searchString, " perhaps try a different drug name."))
+    return(NULL)
   }
 
   return(llmConceptSet)
 }
 
-.getAllDomains <- function (conceptList, connectionDetails, cdmDatabaseSchema) {
+.getAllDomains <- function (conceptList,
+                            connectionDetails,
+                            cdmDatabaseSchema,
+                            excludedVocabularies) {
 
   connection <- suppressMessages(DatabaseConnector::connect(connectionDetails = connectionDetails))
   on.exit(DatabaseConnector::disconnect(connection))
-
-  excludedVocabularies <- ""
 
   sqlFilename <- "FullConcepts.sql"
   conceptList <- conceptList[!is.na(conceptList)]

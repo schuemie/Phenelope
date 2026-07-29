@@ -25,6 +25,8 @@ G5) If MAIN_CONCEPT has multiple parts ALL of the parts need to be satisfied.
   NOTE: ALL parts, especially the body regions are CRITICAL.
   Example: "traumatic hemmorhage" DOES NOT imply any specific body part so it should not be included in the current example ("head trauma with intracranial hemorrhage")
 G6) DO NOT use interpretation of codes, e.g., ICD-10-PCS terminology, in your answer or rationale.
+G7) NEVER infer proposed concept(s) to be more specific by adding or assuming extra words for clarity!
+  Example 1: for the proposed concept "Dilation and curettage of uterus after abortion", DO NOT assume abortion is either spontaneous or induced as that is UNKNOWN based on the text string given.
 
 Domain specific rules:
 D1) For the domain of HEALTH CONDITIONS, if the proposed concept implies that patient has MAIN_CONCEPT, it should be included.

@@ -92,32 +92,36 @@
       )
 
       concepts <- DatabaseConnector::querySql(connection = connection2, sql, snakeCaseToCamelCase = TRUE)
-      concepts$phoebe <- T
+      if(nrow(concepts) > 0) {
+        concepts$phoebe <- T
 
-      # Substrings to exclude
-      excludeWords <- c(
-        "finding$",
-        "^Disorder of",
-        "^Finding of",
-        "^Disease of",
-        "Injury of",
-        "by site$",
-        "by body site$",
-        "by mechanism$",
-        "of body region$",
-        "of anatomical site$",
-        "of specific body structure$"
-      )
+        # Substrings to exclude
+        excludeWords <- c(
+          "finding$",
+          "^Disorder of",
+          "^Finding of",
+          "^Disease of",
+          "Injury of",
+          "by site$",
+          "by body site$",
+          "by mechanism$",
+          "of body region$",
+          "of anatomical site$",
+          "of specific body structure$"
+        )
 
-      exceptionWords <- c("due to", "caused by")
+        exceptionWords <- c("due to", "caused by")
 
-      # Filter rows
-      concepts <- concepts[!(
-        sapply(concepts$conceptName, function(x) any(grepl(paste(excludeWords, collapse = "|"), x))) &
-          !sapply(concepts$conceptName, function(x) any(grepl(paste(exceptionWords, collapse = "|"), x)))
-      ), ]
+        # Filter rows
+        concepts <- concepts[!(
+          sapply(concepts$conceptName, function(x) any(grepl(paste(excludeWords, collapse = "|"), x))) &
+            !sapply(concepts$conceptName, function(x) any(grepl(paste(exceptionWords, collapse = "|"), x)))
+        ), ]
 
-      concepts <- rbind(concepts, conceptList)
+        concepts <- rbind(concepts, conceptList)
+      } else { # no valid phoebe recommendations - possible to get phoebe recommendations from hecate not in db
+        concepts <- conceptList
+      }
     } else { # no phoebe recommendations
       concepts <- conceptList
     }
@@ -256,6 +260,7 @@
 
       prompt <- paste(updatedLines, collapse = "\n")
       lastPrompt <- prompt
+      saveLastPrompt(prompt)
 
       retryLimit <- 10 # Maximum number of retries
       attempt <- 0 # Initial attempt counter
@@ -303,6 +308,7 @@
 
                 if(bucketAttempt == 10) {
                   stop("LLM connection issue...stopping")
+                  saveLastPrompt(prompt)
                 }
               }
             }
@@ -327,6 +333,7 @@
           error = function(e) {
             # Handle the error: print a message and increment the attempt counter
             message(paste("Attempt", attempt, "failed:", e$message))
+
             message(paste0("Failure on: ***", testCondition, "***"))
             if (grepl("abort", e$message, ignore.case = TRUE)) {
               cat("Stopping the run as requested.\n")
@@ -571,10 +578,12 @@ queryLLM <- function(llmClient, prompt, systemPrompt = NULL, silent = TRUE, outp
   while (attempt <= retry_limit && !success) { #llm will mislabel column headers occasionally - usually fixed with a re-try
     tryCatch({
       attempt <- attempt + 1  # Increment the attempt count
+      saveLastPrompt(prompt)
 
       if(output == "text") { #simple text return
         text <- llmClient$chat(prompt,
                                echo = "none")
+
         results <- text
       } else { #json return
         text <- llmClient$chat_structured(prompt,
@@ -599,6 +608,7 @@ queryLLM <- function(llmClient, prompt, systemPrompt = NULL, silent = TRUE, outp
     error = function(e) {
       # Handle the error: print a message and increment the attempt counter
       message(paste("Attempt", attempt, "failed:", e$message))
+
       if(grepl("abort", e$message, ignore.case=TRUE)) {
         cat("Stopping the run as requested.\n")
         stop("Execution stopped by user.")
