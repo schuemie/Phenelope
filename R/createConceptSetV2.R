@@ -132,7 +132,7 @@ createConceptSet <- function(conceptName,
   }
 
   conditionForFiles <- gsub("/", "-", conceptName) # remove slashes
-  conditionForFiles <- paste(utils::head(unlist(strsplit(conditionForFiles, " ")), 3), collapse = " ")
+  conditionForFiles <- paste(utils::head(unlist(strsplit(conditionForFiles, " ")), 100), collapse = " ")
   if (excludedConcepts == "") {
     excludedConcepts <- "None"
   }

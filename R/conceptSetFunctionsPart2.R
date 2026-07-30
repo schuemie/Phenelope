@@ -584,6 +584,16 @@ WHERE concept_id IN (@concept_ids)
   }
 }
 
+#' Provide the class of a drug object from a string appropriate for building a concept set
+#'
+#' @description
+#' Provide the class of a drug object from a string appropriate for building a concept set
+#'
+#' @details
+#' Provide the class of a drug object from a string appropriate for building a concept set
+#'
+#' @param drugName    a string that represents the drug of interest
+#' @return a dataframe with various elements including the vocabulary class for the drug associated with the given string
 #' @export
 getDrugClass <- function(drugName) {
   ellmerTypeObject <- ellmer::type_array(ellmer::type_object(
@@ -625,7 +635,7 @@ getDrugClass <- function(drugName) {
             drugNameInformation$dosageFormYesNo == "NO" &
             drugNameInformation$drugStrengthYesNo ==  "NO" &
             drugNameInformation$drugBrandYesNo ==  "NO" ) {
-    class <- "Clinical Dose Group"
+    class <- "Clinical Drug Form"
   } else if(drugNameInformation$routeOfAdministrationYesNo == "YES" &
             drugNameInformation$dosageFormYesNo == "YES" &
             drugNameInformation$drugStrengthYesNo ==  "NO" &
@@ -657,7 +667,7 @@ getDrugClass <- function(drugName) {
             drugNameInformation$drugBrandYesNo ==  "YES" ) {
     class <- "Branded Drug, Quant Branded Drug, Marketed Product"
   } else if(drugNameInformation$multipleDrugYesNo == "YES")  { #best fit for multiple active ingredients
-    class <- "Clinical Dose Group"
+    class <- "Clinical Drug Form"
   } else {
     class <- "Unknown"
   }
@@ -862,11 +872,28 @@ getDrugClass <- function(drugName) {
   return(domains)
 }
 
+#' Turn a concept set in json list form into a vector of all included concepts
+#'
+#' @description
+#' Create a vector of all included concept ids from a json list object.
+#'
+#' @details
+#' This function will create a vector of all included concept ids from a json list object.
+#'
+#' @param conceptSet    JSON object in list form
+#' @param connectionDetails An R object of type connectionDetails created using the function createConnectionDetails in the
+#'                          DatabaseConnector package.
+#' @param cdmDatabaseSchema The name of the database schema that contains the OMOP CDM
+#'                                   instance. Requires read permissions to this database. On SQL
+#'                                   Server, this should specify both the database and the
+#'                                   schema, so for example 'cdm_instance.dbo'.
+#' @return a vector of concept ids
 #' @export
+
 resolveConceptSet <- function(conceptSet, #in list form
                               connectionDetails,
                               cdmDatabaseSchema) {
-  #turn a concept set in json list form into a list of all included concepts
+
   connection <- suppressMessages(DatabaseConnector::connect(connectionDetails = connectionDetails))
   on.exit(DatabaseConnector::disconnect(connection))
 
