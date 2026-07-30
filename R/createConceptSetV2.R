@@ -208,6 +208,8 @@ createConceptSet <- function(conceptName,
 
         if(specialty$yesNo == "YES") { #this will ensure that the specialty provider and the visit type is included
           searchString <- paste0(searchString, " (specialty)")
+          standardOnly <- FALSE #special for visits
+
         }
 
       } else if(domainToUse %in% c("DEVICE")) {
