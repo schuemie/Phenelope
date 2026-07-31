@@ -198,6 +198,7 @@ createConceptSet <- function(conceptName,
 
         prompt <- paste0("Does ", searchString, " imply a visit involving a clinical specialist? ",
                          "If yes, what is the name of the clinical specialty? ",
+                         "NOTE: any mention of a specific health condition for a visit infers a specialist is present",
                          "  {
                             \"visitName\": \"Name of visit code in question\",
                             \"yesNo\": \"YES or NO\",

@@ -570,6 +570,7 @@ WHERE concept_id IN (@concept_ids)
                                      excludedConcepts = excludedConcepts,
                                      conceptClasses = classes,
                                      additionalInformation = additionalInformation,
+                                     clinicalContext = clinicalContext,
                                      connection = connection,
                                      connectionDetails = connectionDetails,
                                      cdmDatabaseSchema = cdmDatabaseSchema,
