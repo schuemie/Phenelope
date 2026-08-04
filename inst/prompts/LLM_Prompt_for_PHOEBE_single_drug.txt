@@ -12,7 +12,7 @@ ADDITIONAL_INFORMATION
 
 General rules:
 G1) Always consider synonyms of MAIN_CONCEPT to be absolutely CLINICALLY interchangeable with MAIN_CONCEPT in ALL contexts (everyday use, different ontologies, clinical context, etc.).
-G2) DO NOT infer SUGGESTED_CONCEPT_SHORT to be more specific such as by adding a non-specified body part or region or adding extra words for clarity!
+G2) DO NOT infer SUGGESTED_CONCEPT_SHORT to be more specific such as by adding specific words like Depot or region or adding extra words for clarity!
 G3) Additional information: ADDITIONAL_INFORMATION
 G4) ALWAYS keep in mind the current clinical context: CLINICAL_CONTEXT - all patients are in this category of subjects.
 G5) If MAIN_CONCEPT has multiple parts ALL of the parts need to be satisfied.
@@ -33,6 +33,7 @@ G9) There are differences between "long acting" oral medications and "long actin
     2) Long-chain esters (e.g., decanoate formulations) that must be gradually broken down by the body before the active drug is released.
     3) Microsphere technology that slowly degrades and releases medication over time.
     4) Nanocrystal suspensions that dissolve gradually after injection.
+    5) Always consider the dose of the product. Some products have lower doses NOT intended as long acting.
 
 Use the following specific rules to decide on your answer:
 S1) If the proposed concept(s) is EITHER synonomous with OR has recognized DIRECT therapeutic and pharmacologic use as a MAIN_CONCEPT in CLINICAL_CONTEXT, the answer is YES.

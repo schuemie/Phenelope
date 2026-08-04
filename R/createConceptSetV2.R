@@ -173,7 +173,7 @@ createConceptSet <- function(conceptName,
         phoebeExclusions <- c() #no exclusions for conditions
 
       } else if(domainToUse %in% c("PROCEDURE")) {
-        domains <- c("Procedure")
+        domains <- c("Procedure","Device", "Observation")
         classes <- c("Procedure", "CPT4", "Clinical Observation")
         phoebeExclusions <- c("Ontology-parent") #not valuable for procedures
 
@@ -215,7 +215,7 @@ createConceptSet <- function(conceptName,
 
       } else if(domainToUse %in% c("DEVICE")) {
         #get seed concept ids from hecate
-        domains <- c("Device")
+        domains <- c("Procedure", "Device", "Observation")
         classes <- c("Physical Object")
         phoebeExclusions <- c("Ontology-parent") #not valuable for devics
 
