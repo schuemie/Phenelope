@@ -116,6 +116,11 @@ createConceptSet <- function(conceptName,
 
   checkmate::reportAssertions(collection = errorMessages)
 
+  # log params, explicitly exclude connectionDetails if you want (extra safety)
+  logCallParams(output_dir = outputDirectory,
+                  exclude = c("connectionDetails"),
+                  filename_prefix = "createConceptSet")
+
   DatabaseConnector::assertTempEmulationSchemaSet(
     dbms = connectionDetails$dbms,
     tempEmulationSchema = tempEmulationSchema

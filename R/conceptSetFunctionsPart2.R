@@ -852,6 +852,8 @@ getDrugClass <- function(drugName) {
                             cdmDatabaseSchema,
                             excludedVocabularies) {
 
+  if(length(conceptList) == 0) {return(NULL)}
+
   connection <- suppressMessages(DatabaseConnector::connect(connectionDetails = connectionDetails))
   on.exit(DatabaseConnector::disconnect(connection))
 
@@ -908,4 +910,100 @@ resolveConceptSet <- function(conceptSet, #in list form
   conceptIdList <- DatabaseConnector::querySql(connection = connection, sql, snakeCaseToCamelCase = TRUE)
 
   return(conceptIdList)
+}
+
+# log_call_params: log the parameters of the calling function to a CSV file
+logCallParams <- function(output_dir,
+                            filename_prefix = NULL,
+                            exclude = character(),                      # names to always exclude
+                            redact_patterns = c("password", "pass", "pwd",
+                                                "secret", "token", "key",
+                                                "connection", "cred", "private"),
+                            redact_replace = "<REDACTED>",
+                            parent = parent.frame()) {
+  # Basic validation / ensure output dir
+  if (missing(output_dir) || is.null(output_dir) || output_dir == "") {
+    stop("Please provide a valid output_dir (e.g. outputDirectory from your function).")
+  }
+  if (!dir.exists(output_dir)) {
+    dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
+  }
+
+  # Determine caller function and its formal args
+  caller_index <- sys.parent()           # frame index of the caller
+  # In rare circumstances sys.parent() can be 0; guard:
+  if (caller_index == 0) caller_index <- 1
+  caller_func <- tryCatch(sys.function(caller_index), error = function(e) NULL)
+  formal_names <- if (!is.null(caller_func)) names(formals(caller_func)) else character(0)
+
+  # Capture caller environment as a list and keep only formal args
+  caller_env_list <- as.list(parent, all.names = TRUE)
+  params <- caller_env_list[names(caller_env_list) %in% formal_names]
+
+  # If no formal parameters were found, fall back to attempting to examine the call
+  if (length(params) == 0 && !is.null(caller_func)) {
+    # Attempt to evaluate formals in parent.frame() in case names exist but not bound as locals
+    params <- list()
+    for (n in formal_names) {
+      if (exists(n, envir = parent, inherits = FALSE)) {
+        params[[n]] <- get(n, envir = parent)
+      } else {
+        # try to capture default value from formals (not evaluated)
+        default_val <- formals(caller_func)[[n]]
+        if (!is.null(default_val)) {
+          # attempt to evaluate default in the function's enclosing environment
+          params[[n]] <- tryCatch(eval(default_val, envir = parent), error = function(e) "<default_not_evaluable>")
+        } else {
+          params[[n]] <- NULL
+        }
+      }
+    }
+  }
+
+  # Apply explicit exclusions
+  for (nm in intersect(names(params), exclude)) {
+    params[[nm]] <- redact_replace
+  }
+
+  # Apply pattern-based redaction
+  for (nm in names(params)) {
+    if (any(vapply(redact_patterns, function(p) grepl(p, nm, ignore.case = TRUE), logical(1)))) {
+      params[[nm]] <- redact_replace
+    }
+  }
+
+  # Prepare human-readable string values for CSV
+  param_to_string <- function(x) {
+    if (is.null(x)) return("NULL")
+    if (length(x) == 0) return("empty")
+    # small atomic vectors -> join with semicolon
+    if (is.atomic(x) && length(x) <= 10 && (is.numeric(x) || is.character(x) || is.logical(x))) {
+      return(paste(as.character(x), collapse = ";"))
+    }
+    # for other objects, use dput capture (single-line)
+    paste(utils::capture.output(dput(x)), collapse = " ")
+  }
+
+  param_strings <- vapply(params, param_to_string, FUN.VALUE = character(1), USE.NAMES = TRUE)
+
+  df <- data.frame(
+    parameter = names(param_strings),
+    value = unname(param_strings),
+    stringsAsFactors = FALSE
+  )
+
+  # Build filename: use caller name if available
+  caller_name <- tryCatch({
+    call_expr <- sys.call(caller_index)
+    if (!is.null(call_expr)) as.character(call_expr[[1]]) else "caller"
+  }, error = function(e) "caller")
+
+  ts <- format(Sys.time(), "%Y%m%d_%H%M%S")
+  if (is.null(filename_prefix)) filename_prefix <- paste0(caller_name, "_params")
+  filename <- file.path(output_dir, paste0(filename_prefix, "_", ts, ".csv"))
+
+  # Write CSV
+  write.csv(df, file = filename, row.names = FALSE, na = "")
+
+  invisible(filename)
 }
