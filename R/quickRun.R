@@ -6,8 +6,9 @@
                                              connection,
                                              cdmDatabaseSchema,
                                              excludedConcepts = "none",
-                                             additionalInformation = "",
+                                             clinicalDefinition = "",
                                              clinicalContext,
+                                             conditionForFiles = conditionForFiles,
                                              bucketSize = 1) {
 
   text <- "included concepts"
@@ -30,6 +31,7 @@
   )
 
   conceptList <- DatabaseConnector::querySql(connection, sql, snakeCaseToCamelCase = TRUE)
+  conceptList$conceptSetTarget <- conceptList$conceptName
   concepts <- conceptList
 
   conceptsToUse <- concepts
@@ -45,7 +47,7 @@
   cost <- 0
   llmClient$set_turns(list()) # Reset the chat
 
-  concepts$conceptName <- gsub("\\[|\\]", " ", concepts$conceptName) #remove any [ or ] from name (interferes with json structure)
+  concepts$conceptSetTarget <- gsub("\\[|\\]", " ", concepts$conceptName) #remove any [ or ] from name (interferes with json structure)
   if (nrow(concepts) != 0) {
     startPoint <- 1
     endPoint <- min(bucketSize, nrow(concepts))
@@ -53,20 +55,20 @@
       cat(paste0("--Querying LLM - Analyzing concepts ", startPoint, " through ", endPoint, " of ", nrow(concepts), "  \r"))
       concepts$aboveMin[1] <- T # always test the first concept
 
-      testCondition <- concepts[startPoint:endPoint, c("conceptId", "conceptName")]
+      testCondition <- concepts[startPoint:endPoint, c("conceptId", "conceptSetTarget")]
       baseCondition <- query
 
       updatedLines <- gsub("MAIN_CONCEPT", baseCondition, originalLines)
 
       if(bucketSize == 1) {
-        testConditionShort <- concepts[startPoint:endPoint, c("conceptName")]
+        testConditionShort <- concepts[startPoint:endPoint, c("conceptSetTarget")]
         updatedLines <- gsub("SUGGESTED_CONCEPT_SHORT", testConditionShort, updatedLines)
       }
       json_all <- jsonlite::toJSON(testCondition)
       updatedLines <- gsub("SUGGESTED_CONCEPT", json_all, updatedLines)
       updatedLines <- gsub("EXCLUDED_CONCEPTS", excludedConcepts, updatedLines)
       updatedLines <- gsub("CLINICAL_CONTEXT", clinicalContext, updatedLines)
-      updatedLines <- gsub("ADDITIONAL_INFORMATION", additionalInformation, updatedLines)
+      updatedLines <- gsub("ADDITIONAL_INFORMATION", clinicalDefinition, updatedLines)
 
       prompt <- paste(updatedLines, collapse = "\n")
 

@@ -1,13 +1,6 @@
 
 Your specific task is to evaluate whether any of the proposed concept(s) are part of the specific concept, MAIN_CONCEPT.
 
-NOTE: there may be more than one proposed concept to evaluate.  Evaluate each one SEPARATELY and provide a complete answer for each proposed concept.
-Here is your data to analyze:
-proposed concept(s): SUGGESTED_CONCEPT
-specific concept: MAIN_CONCEPT
-excluded concepts: EXCLUDED_CONCEPTS
-Current clinical context: CLINICAL_CONTEXT
-
 Here is IMPORTANT additional information for you to use in you analysis:
 ADDITIONAL_INFORMATION
 
@@ -57,6 +50,13 @@ S6) If specific concept(s) has an OR clause, the proposed concept should be incl
 Example: For the specific concept "leukocytosis or neutrophilia condition", include any proposed concept that is correct for leukocytosis OR neutrophilia.
 S7) If specific concept(s) has an AND clause, the proposed concept should be included if it is correct for EITHER of the parts of the specific condition.
 Example: For the specific concept "nausea and vomiting condition", include any proposed concept that is correct for nausea OR vomiting.
+
+NOTE: there may be more than one proposed concept to evaluate.  Evaluate each one SEPARATELY and provide a complete answer for each proposed concept.
+Here is your data to analyze:
+proposed concept(s): SUGGESTED_CONCEPT
+specific concept: MAIN_CONCEPT
+excluded concepts: EXCLUDED_CONCEPTS
+Current clinical context: CLINICAL_CONTEXT
 
 Give a JSON-structured summary for the following (DO NOT ADD ANY OTHER NON-JSON FORMATTED TEXT):
 [

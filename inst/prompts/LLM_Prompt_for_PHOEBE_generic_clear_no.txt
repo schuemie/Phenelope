@@ -1,10 +1,11 @@
 
-Your specific task is to evaluate whether any of the proposed concept(s) are part of the specific concept, MAIN_CONCEPT.
+Your specific task is to rapidly evaluate whether any of the proposed concept(s) are clearly NOT part of the specific concept, MAIN_CONCEPT.
 
 Here is IMPORTANT additional information for you to use in you analysis:
 ADDITIONAL_INFORMATION
 
 General rules:
+G0) "Clearly NOT part of" means that nearly >99% of the time the proposed concept is not a part of MAIN_CONCEPT
 G1) Always consider synonyms of MAIN_CONCEPT to be absolutely CLINICALLY interchangeable with MAIN_CONCEPT in ALL contexts (everyday use, different ontologies, clinical context, etc.).
 G2) DO NOT infer proposed concept(s) to be more specific such as by adding a non-specified body part or region or adding or assuming extra words for clarity!
   Example 1: a proposed concept of "Incisional biopsy" DOES NOT specify it is of the skin (skin is NOT specified and should NOT be assumed) so it should NOT be included in a specific concept of "skin biopsy procedure".
@@ -21,7 +22,6 @@ G5) If MAIN_CONCEPT has multiple parts ALL of the parts need to be satisfied.
 G6) DO NOT use interpretation of codes, e.g., ICD-10-PCS terminology, in your answer or rationale.
 G7) NEVER infer proposed concept(s) to be more specific by adding or assuming extra words for clarity!
   Example 1: for the proposed concept "Dilation and curettage of uterus after abortion", DO NOT assume abortion is either spontaneous or induced as that is UNKNOWN based on the text string given.
-G8) If differential diagnoses are provided, ALWAYS adhere to the rules provided on what should and should not be included
 
 Domain specific rules:
 D1) For the domain of HEALTH CONDITIONS, if the proposed concept implies that patient has MAIN_CONCEPT, it should be included.
@@ -38,8 +38,8 @@ D6) For the domain of PROCEDURES, if an action word is ambiguous, use a narrow s
   Example 1: the word excision does not always imply a partial or complete excision, assume the interpretation of the word > 95% of the time.
     "Excision of bilateral breasts" would NOT be included with "Bilateral mastectomy of female breast", in this case assuming excision means "complete excision" < 95% of the time
 
-Use the following specific rules to decide on your answer:
-S1) If the vast majority (> 95%) of instances of the proposed concept(s) make it a part of MAIN_CONCEPT in CLINICAL_CONTEXT, the answer is YES.
+Use the following specific rules to decide on your answer (YES means they are SHOULD be a part of MAIN_CONCEPT):
+S1) If the vast majority (> 50%) of instances of the proposed concept(s) make it a part of MAIN_CONCEPT in CLINICAL_CONTEXT, the answer is YES.
 Positive Example:  a proposed concept of "Photochemotherapy" nearly ALWAYS involves chemo AND photo therapy, so it should be included in a specific concept of "phototherapy procedure" even though it also includes chemical therapy.
 Negative Example:  a proposed concept of "Procedure on skin" DOES NOT specify phototherapy although most phototherapy involves the skin (phototherapy is NOT specified and should NOT be assumed) AND the vast majority of "Procedure on skin" ARE NOT phototherapy, so it should NOT be included in a specific concept of "phototherapy procedure".
 S2) If proposed concept(s) is ALWAYS a synonym of MAIN_CONCEPT and in the clinical context, CLINICAL_CONTEXT, the answer is YES.
@@ -51,26 +51,6 @@ S6) If specific concept(s) has an OR clause, the proposed concept should be incl
 Example: For the specific concept "leukocytosis or neutrophilia condition", include any proposed concept that is correct for leukocytosis OR neutrophilia.
 S7) If specific concept(s) has an AND clause, the proposed concept should be included if it is correct for EITHER of the parts of the specific condition.
 Example: For the specific concept "nausea and vomiting condition", include any proposed concept that is correct for nausea OR vomiting.
-S8) Classify the stability of your YES/NO decision.
-S8) confidenceLevel
-
-CLEAR
-- A knowledgeable ontologist would be highly likely to reach the same answer.
-
-BORDERLINE
-- Either:
-  (a) a knowledgeable ontologist could reasonably reach the opposite answer
-  OR
-  (b) the wording or relationship introduces elevated risk of answer variability across runs.
-S9) Only if confidenceLevel is BORDERLINE, provide the rationaleForAnswer.
-
-If confidenceLevel is CLEAR:
-- Provide a brief rationale of no more than 15 words.
-- Do not discuss competing interpretations.
-
-If confidenceLevel is BORDERLINE:
-- Explain the strongest reason for inclusion and the strongest reason for exclusion.
-- Then provide the final determination.
 
 NOTE: there may be more than one proposed concept to evaluate.  Evaluate each one SEPARATELY and provide a complete answer for each proposed concept.
 Here is your data to analyze:
@@ -79,16 +59,13 @@ specific concept: MAIN_CONCEPT
 excluded concepts: EXCLUDED_CONCEPTS
 Current clinical context: CLINICAL_CONTEXT
 
+Add items in the JSON structure below of proposed concepts that are CLEARLY NOT part of the specific concept, MAIN_CONCEPT.
+NOTE: ONLY return the proposed concepts that are CLEARLY NOT part of the specific concept
 Give a JSON-structured summary for the following (DO NOT ADD ANY OTHER NON-JSON FORMATTED TEXT):
 [
   {
-    "conceptId": "proposed concept Id",
+    "conceptId": "proposed concept Id that is CLEARLY NOT part of the specific concept, MAIN_CONCEPT",
     "suggestedConcept": "proposed concept name",
-    "excludedConcepts": "Create a comma separated string of the excluded concepts.",
-    "proposedInExcluded": "Is proposed concept in the excluded concepts (EXCLUDED_CONCEPTS)? (YES or NO)",
-    "finalAnswer": "Do the vast majority (> 95%) of instances of the proposed concept make it a part of MAIN_CONCEPT in the current clinical context (CLINICAL_CONTEXT)? [IMPORTANT Answer ONLY as: 'YES', 'NO' (DO NOT REPEAT THE QUESTION IN YOUR ANSWER!)]",
-    "rationaleForAnswer": "Provide a rationale for your answer INCLUDING the rule above that was satisfied",
-    "confidenceLevel": "CLEAR or BORDERLINE"
-
+    "rationale": "provide a rationale for your decision",
   }
 ]

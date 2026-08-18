@@ -22,7 +22,7 @@
 #' @details
 #' This function will create a concept set starting from a clinical condition and a concept id.
 #'
-#' @param conceptName Character. Name of the concept pointing to the clinical condition.
+#' @param conceptSetTarget Character. Name of the concept pointing to the clinical condition.
 #' @param originalConceptList Integer or character vector. List of concept ids to use as a starting point.
 #' @param excludedConcepts Character. Names of concepts to be excluded from the concept set.
 #' @param llmClient connection object for the LLM client (see ellmer package for object details)
@@ -46,7 +46,7 @@
 #'              consensus vote from multiple LLM iterations.
 #' @param successes Integer. How many successes required to include a concept. The package allows for multiple runs of the same concept to
 #'                  get a consensus vote from multiple LLM iterations.
-#' @param additionalInformation Character. Additional information for concept development.  This may include any specific details that
+#' @param clinicalDefinition Character. Additional information for concept development.  This may include any specific details that
 #'                              are desired for the concepts, for example, "only in women"
 #' @param clinicalContext Character. Optional clinical context for the LLM to determine appropriateness of a concept, for example,
 #'                                  "following surgery" would include concepts whose name indicates it happened post-surgery.
@@ -58,7 +58,7 @@
 #' @return Final results set as a list of two elements 1) a data frame of the LLM results for each tested concept
 #'                                                     and 2) a JSON object ready for porting into ATLAS if successful, FALSE if unsuccessful.
 #' @export
-createConceptSet <- function(conceptName,
+createConceptSet <- function(conceptSetTarget,
                              originalConceptList,
                              excludedConcepts = "none",
                              llmClient,
@@ -70,7 +70,7 @@ createConceptSet <- function(conceptName,
                              outputDirectory,
                              tries = 1,
                              successes = 1,
-                             additionalInformation = "",
+                             clinicalDefinition = "",
                              excludedVocabularies = c("ICDO3"),
                              condenseConceptSet = TRUE,
                              clinicalContext = "any clinical context",
@@ -88,7 +88,7 @@ createConceptSet <- function(conceptName,
 
   checkmate::assertCharacter(excludedConcepts, len = 1, add = errorMessages)
 
-  checkmate::assertCharacter(conceptName, len = 1, add = errorMessages)
+  checkmate::assertCharacter(conceptSetTarget, len = 1, add = errorMessages)
   checkmate::assertIntegerish(originalConceptList, min.len = 1, add = errorMessages)
   checkmate::assertCharacter(belowMinimumCountApproach, len = 1, add = errorMessages)
   checkmate::assertChoice(belowMinimumCountApproach,
@@ -108,7 +108,7 @@ createConceptSet <- function(conceptName,
                           add = errorMessages
   )
   checkmate::assertCharacter(outputDirectory, len = 1, add = errorMessages)
-  checkmate::assertCharacter(additionalInformation, len = 1, null.ok = TRUE, add = errorMessages)
+  checkmate::assertCharacter(clinicalDefinition, len = 1, null.ok = TRUE, add = errorMessages)
   checkmate::assertCharacter(clinicalContext, len = 1, null.ok = TRUE, add = errorMessages)
   checkmate::assertCharacter(clinicalContext, len = 1, null.ok = TRUE, add = errorMessages)
   checkmate::assertLogical(condenseConceptSet, add = errorMessages)
@@ -121,7 +121,7 @@ createConceptSet <- function(conceptName,
     dbms = connectionDetails$dbms,
     tempEmulationSchema = tempEmulationSchema
   )
-  message("\nDeveloping a concept set for: ", conceptName, "\n")
+  message("\nDeveloping a concept set for: ", conceptSetTarget, "\n")
   connection <- suppressMessages(DatabaseConnector::connect(connectionDetails = connectionDetails))
   on.exit(DatabaseConnector::disconnect(connection))
 
@@ -130,7 +130,7 @@ createConceptSet <- function(conceptName,
     if (!success) stop("Failed to create directory: ", outputDirectory)
   }
 
-  conditionForFiles <- gsub("/", "-", conceptName) # remove slashes
+  conditionForFiles <- gsub("/", "-", conceptSetTarget) # remove slashes
   conditionForFiles <- paste(utils::head(unlist(strsplit(conditionForFiles, " ")), 3), collapse = " ")
   if (excludedConcepts == "") {
     excludedConcepts <- "None"
@@ -164,8 +164,8 @@ createConceptSet <- function(conceptName,
         llmResults <- utils::read.csv(file.path(outputDirectory, paste0("firstPart_", conditionForFiles, tryNumber, ".csv")))
       } else {
         llmResults <- .createRecommendListViaLlmFromConceptList(
-          query = conceptName,
-          closestConditionConcept = conceptName,
+          query = conceptSetTarget,
+          closestConditionConcept = conceptSetTarget,
           conceptList = originalConceptList,
           llmClient,
           connection = connection,
@@ -176,7 +176,7 @@ createConceptSet <- function(conceptName,
           previousResults = NULL,
           excludedConcepts = excludedConcepts,
           belowMinimumCountApproach,
-          additionalInformation = additionalInformation,
+          clinicalDefinition = clinicalDefinition,
           clinicalContext = clinicalContext,
           excludedVocabularies = c(excludedVocabularies),
           domain = domain,
@@ -209,8 +209,8 @@ createConceptSet <- function(conceptName,
       conceptList <- conceptList[!(conceptList %in% c(unlist(ancestorList)))]
 
       llmResults <- .createRecommendListViaLlmFromConceptList(
-        query = conceptName,
-        closestConditionConcept = conceptName,
+        query = conceptSetTarget,
+        closestConditionConcept = conceptSetTarget,
         conceptList = conceptList,
         llmClient,
         connection = connection,
@@ -221,22 +221,22 @@ createConceptSet <- function(conceptName,
         previousResults = previousResults,
         excludedConcepts = excludedConcepts,
         belowMinimumCountApproach,
-        additionalInformation = additionalInformation,
+        clinicalDefinition = clinicalDefinition,
         clinicalContext = clinicalContext,
         excludedVocabularies = c(excludedVocabularies),
         domain = domain,
         bucketSize = bucketSize
       )
     } else { #quick run - just test a set of concepts
-      llmResults <- .createRecommendListFromConcepts(query = conceptName,
-                                                   closestConditionConcept = conceptName,
+      llmResults <- .createRecommendListFromConcepts(query = conceptSetTarget,
+                                                   closestConditionConcept = conceptSetTarget,
                                                    conceptList = originalConceptList,
                                                    llmClient,
                                                    connection = connection,
                                                    connectionDetails = connectionDetails,
                                                    cdmDatabaseSchema = cdmDatabaseSchema,
                                                    excludedConcepts = excludedConcepts,
-                                                   additionalInformation = additionalInformation,
+                                                   clinicalDefinition = clinicalDefinition,
                                                    clinicalContext = clinicalContext,
                                                    domain = domain,
                                                    bucketSize = bucketSize)

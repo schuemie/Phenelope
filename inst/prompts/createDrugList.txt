@@ -12,6 +12,9 @@ Here is the current list:
 
 CURRENT_LIST
 
+Here is important additional information:
+ADDITIONAL_INFORMATION
+
 Add more to this list (do not include those in the current list)
 
 General rules:
@@ -25,8 +28,8 @@ G4) This list should be EXTEMELY SENSITIVE - include members in the list even if
 G5) When in doubt, INCLUDE it in the list.  It will get corrected at a later stage in the process.
 G6) ALWAYS use multiple sources of evidence to find the drugs - DO NOT stop after a single source.  Remember the goal is an extremely sensitive list.  It MUST include ALL possible SEARCH_TERM even those that are questionable
 G7) Use the current list (if there are any in the list) as seeds to find similar drugs
-G8) If the current list id empty, you should be adding at least START_NUMBER new drugs
-G9) If there are members in the current list, you should be adding at least NEXT_NUMBER additional drugs
+G8) If the current list id empty, you should be adding at least START_NUMBER new drugs UNLESS a defined list of drugs are named then limit to named drugs only
+G9) If there are members in the current list, you should be adding at least NEXT_NUMBER additional drugs UNLESS a defined list of drugs are named then limit to named drugs only
 
 Give a JSON-structured summary for the following (DO NOT ADD ANY OTHER NON-JSON FORMATTED TEXT):
 {

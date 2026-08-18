@@ -1,7 +1,7 @@
 Your specific task is to evaluate whether SUGGESTED_CONCEPT_SHORT is part of the specific concept, MAIN_CONCEPT.
 
 Here is your data to analyze:
-proposed concept ID (conceptId) and name (conceptName): SUGGESTED_CONCEPT
+proposed concept ID (conceptId) and name (conceptSetTarget): SUGGESTED_CONCEPT
 specific concept: MAIN_CONCEPT
 excluded concepts: EXCLUDED_CONCEPTS
 Current clinical context: CLINICAL_CONTEXT
@@ -60,7 +60,7 @@ Example: For the specific concept "nausea and vomiting condition", include any p
 Give a JSON-structured summary for the following (DO NOT ADD ANY OTHER NON-JSON FORMATTED TEXT):
 {
     "conceptId": "proposed concept Id (conceptId from above)",
-    "suggestedConcept": "proposed concept name (conceptName from above)",
+    "suggestedConcept": "proposed concept name (conceptSetTarget from above)",
     "excludedConcepts": "Create a comma separated string of the excluded concepts.",
     "proposedInExcluded": "Is SUGGESTED_CONCEPT_SHORT in the excluded concepts (EXCLUDED_CONCEPTS)? (YES or NO)",
     "finalAnswer": "Do the vast majority (> 95%) of instances of SUGGESTED_CONCEPT_SHORT make it a part of MAIN_CONCEPT in the current clinical context (CLINICAL_CONTEXT)? [IMPORTANT Answer ONLY as: 'YES', 'NO' (DO NOT REPEAT THE QUESTION IN YOUR ANSWER!)]",

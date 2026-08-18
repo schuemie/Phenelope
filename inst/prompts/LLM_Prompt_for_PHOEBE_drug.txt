@@ -1,12 +1,6 @@
 You are a drug classifier. Your job is to classify drugs according to recognized therapeutic and pharmacologic use WITHOUT using ATC codes in your analysis.
 Your specific task is to evaluate whether any of the proposed concept(s) are EITHER synonomous with OR has recognized DIRECT therapeutic and pharmacologic use as a MAIN_CONCEPT.
 
-Here is your data to analyze:
-proposed concept ID (conceptId) and name (conceptName): SUGGESTED_CONCEPT
-broad concept: MAIN_CONCEPT
-excluded concepts: EXCLUDED_CONCEPTS
-Current clinical context: CLINICAL_CONTEXT
-
 Here is IMPORTANT additional information for you to use in you analysis:
 ADDITIONAL_INFORMATION
 
@@ -42,10 +36,16 @@ S3) If proposed concept is a subtype of MAIN_CONCEPT and in the clinical context
 S4) If proposed concept is a synonym, subtype, or exclusive manifestation of any of EXCLUDED_CONCEPTS (i.e., only happens with EXCLUDED_CONCEPTS), the answer is NO.
 S5) If proposed concept is not possible within the clinical context, CLINICAL_CONTEXT, the answer is NO.
 
+Here is your data to analyze:
+proposed concept ID (conceptId) and name (conceptSetTarget): SUGGESTED_CONCEPT
+broad concept: MAIN_CONCEPT
+excluded concepts: EXCLUDED_CONCEPTS
+Current clinical context: CLINICAL_CONTEXT
+
 Give a JSON-structured summary for the following (DO NOT ADD ANY OTHER NON-JSON FORMATTED TEXT):
 {
     "conceptId": "proposed concept Id (conceptId from above)",
-    "suggestedConcept": "proposed concept name (conceptName from above)",
+    "suggestedConcept": "proposed concept name (conceptSetTarget from above)",
     "excludedConcepts": "Create a comma separated string of the excluded concepts.",
     "proposedInExcluded": "Is proposed concept in the excluded concepts (EXCLUDED_CONCEPTS)? (YES or NO)",
     "finalAnswer": "Is proposed concept EITHER synonomous with OR has recognized DIRECT therapeutic and pharmacologic use as a MAIN_CONCEPT in the current clinical context (CLINICAL_CONTEXT)? [IMPORTANT Answer ONLY as: 'YES', 'NO' (DO NOT REPEAT THE QUESTION IN YOUR ANSWER!)]",

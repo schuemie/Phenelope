@@ -26,12 +26,14 @@
                                                       previousResults,
                                                       excludedConcepts = "none",
                                                       belowMinimumCountApproach = "TEST ALL",
-                                                      additionalInformation = "",
+                                                      clinicalDefinition = "",
                                                       clinicalContext,
                                                       excludedVocabularies = c("ICDO3"),
                                                       domain,
                                                       phoebeExclusions = phoebeExclusions,
-                                                      bucketSize) {
+                                                      bucketSize,
+                                                      conditionForFiles,
+                                                      outputDirectory) {
   if (type == "phoebe") {
     text <- "PHOEBE"
   } else {
@@ -62,6 +64,12 @@
   )
 
   conceptList <- DatabaseConnector::querySql(connection = connection2, sql = sql, snakeCaseToCamelCase = TRUE)
+  conceptList$conceptSetTarget <- conceptList$conceptName
+
+  if(nrow(conceptList) == 0) {
+    message(paste0("\n...no concepts found for ", query))
+    return(NULL)  # Return NULL in case of no concepts
+  }
 
   if (nrow(conceptList) != 0) {
     conceptList$phoebe <- F
@@ -72,11 +80,13 @@
     # recs <- .getPhoebeData(c(conceptList$conceptId))
     recs <- .getAnyPhoebeData(c(conceptList$conceptId))
 
-    if(nrow(recs) != 0) {
-      if(length(phoebeExclusions)) {
-        recs <- recs[!(recs$relationshipId %in% c(phoebeExclusions)),]
+    if(!is.null(recs)) {
+      if(nrow(recs) != 0) {
+        if(length(phoebeExclusions)) {
+          recs <- recs[!(recs$relationshipId %in% c(phoebeExclusions)),]
+        }
+        recs <- recs[!(recs$conceptId %in% c(conceptList$conceptId)), ]
       }
-      recs <- recs[!(recs$conceptId %in% c(conceptList$conceptId)), ]
     }
     recsFinal <- recs
 
@@ -92,6 +102,8 @@
       )
 
       concepts <- DatabaseConnector::querySql(connection = connection2, sql, snakeCaseToCamelCase = TRUE)
+      concepts$conceptSetTarget <- concepts$conceptName
+
       if(nrow(concepts) > 0) {
         concepts$phoebe <- T
 
@@ -114,8 +126,8 @@
 
         # Filter rows
         concepts <- concepts[!(
-          sapply(concepts$conceptName, function(x) any(grepl(paste(excludeWords, collapse = "|"), x))) &
-            !sapply(concepts$conceptName, function(x) any(grepl(paste(exceptionWords, collapse = "|"), x)))
+          sapply(concepts$conceptSetTarget, function(x) any(grepl(paste(excludeWords, collapse = "|"), x))) &
+            !sapply(concepts$conceptSetTarget, function(x) any(grepl(paste(exceptionWords, collapse = "|"), x)))
         ), ]
 
         concepts <- rbind(concepts, conceptList)
@@ -137,7 +149,7 @@
   }
 
   if (nrow(recs) != 0) { # phoebe recs found
-    concepts <- merge(concepts, unique(recs[, c("conceptId", "conceptName", "recordCount")]), all.x = T)
+    concepts <- merge(concepts, unique(recs[, c("conceptId", "conceptSetTarget", "recordCount")]), all.x = T)
   } else { # no phoebe recs
     concepts$recordCount <- NA
   }
@@ -148,6 +160,25 @@
     dplyr::arrange(desc(.data$phoebe), desc(.data$aboveMin))
 
   message("\n--Current number of concepts: ", nrow(concepts))
+
+  if (type == "phoebe" & nrow(concepts) > 500) { #on first pass through for large sets
+    #remove the clearly "no" concepts
+    message("\n--Removing concepts that clearly do not belong...")
+    updatedConcepts <- removeClearNo(query = query,
+                                     conceptList = concepts,
+                                     llmClient = llmClient,
+                                     clinicalDefinition = clinicalDefinition,
+                                     clinicalContext = clinicalContext,
+                                     bucketSize = 200)
+
+    concepts <- concepts[!(concepts$conceptId %in% c(updatedConcepts$conceptId)),]
+    message(paste0("--", nrow(concepts), " concepts remain to be fully tested.\n"))
+
+    # save to dataframe as a csv
+    if(nrow(updatedConcepts) > 0) {
+      utils::write.csv(updatedConcepts, file.path(outputDirectory, paste0(conditionForFiles, "_removedConcepts.csv")), row.names = F)
+    }
+  }
 
   previousRun <- data.frame()
   if (!is.null(previousResults)) {
@@ -162,7 +193,7 @@
   if (type != "phoebe") { # add in the main concept on the second pass through
     temp <- conceptsToUse[1, ]
     temp$conceptId <- closestConditionConcept
-    temp$conceptName <- query
+    temp$conceptSetTarget <- query
     conceptsToUse <- rbind(conceptsToUse, temp)
   }
 
@@ -191,7 +222,7 @@
     } else { #add concept to listed of untested as per min count and disposition
       resultsDf <- NULL
       resultsDf$conceptId <- concepts$conceptId[[conceptUp]]
-      resultsDf$suggestedConcept <- concepts$conceptName[[conceptUp]]
+      resultsDf$suggestedConcept <- concepts$conceptSetTarget[[conceptUp]]
       resultsDf$mainCondition <- query
       resultsDf$excludedConcepts <-  ""
       resultsDf$proposedInExcluded <-  ""
@@ -233,7 +264,7 @@
     concepts <- testList
   }
 
-  concepts$conceptName <- gsub("\\[|\\]", " ", concepts$conceptName) #remove any [ or ] from name (interferes with json structure)
+  concepts$conceptSetTarget <- gsub("\\[|\\]", " ", concepts$conceptSetTarget) #remove any [ or ] from name (interferes with json structure)
   if (nrow(concepts) != 0) {
     startPoint <- 1
     endPoint <- min(bucketSize, nrow(concepts))
@@ -241,13 +272,13 @@
       cat(paste0("--Querying LLM - Analyzing concepts ", startPoint, " through ", endPoint, " of ", nrow(concepts), "  \r"))
       concepts$aboveMin[1] <- T # always test the first concept
 
-      testCondition <- concepts[startPoint:endPoint, c("conceptId", "conceptName")]
+      testCondition <- concepts[startPoint:endPoint, c("conceptId", "conceptSetTarget")]
       baseCondition <- query
 
       updatedLines <- gsub("MAIN_CONCEPT", baseCondition, originalLines)
 
       if(bucketSize == 1) {
-        testConditionShort <- concepts[startPoint:endPoint, c("conceptName")]
+        testConditionShort <- concepts[startPoint:endPoint, c("conceptSetTarget")]
         updatedLines <- gsub("SUGGESTED_CONCEPT_SHORT", testConditionShort, updatedLines)
       }
 
@@ -256,7 +287,7 @@
 
       updatedLines <- gsub("EXCLUDED_CONCEPTS", excludedConcepts, updatedLines)
       updatedLines <- gsub("CLINICAL_CONTEXT", clinicalContext, updatedLines)
-      updatedLines <- gsub("ADDITIONAL_INFORMATION", additionalInformation, updatedLines)
+      updatedLines <- gsub("ADDITIONAL_INFORMATION", clinicalDefinition, updatedLines)
 
       prompt <- paste(updatedLines, collapse = "\n")
       lastPrompt <- prompt
@@ -287,9 +318,9 @@
                                                   suggestedConcept = ellmer::type_string(),
                                                   excludedConcepts = ellmer::type_string(),
                                                   proposedInExcluded = ellmer::type_string(),
-                                                  finalAnswer = ellmer::type_string(),
+                                                  finalAnswer = ellmer::type_enum(values = c("YES","NO")),
                                                   rationaleForAnswer = ellmer::type_string(),
-                                                  confidenceLevel = ellmer::type_string()
+                                                  confidenceLevel = ellmer::type_enum(values = c("CLEAR","BORDERLINE"))
                                                 ))
               )
 
@@ -446,6 +477,7 @@
     phoebeData <- NULL
   }
 
+  phoebeData$conceptSetTarget <- phoebeData$conceptName
   return(phoebeData)
 }
 

@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-.fullConceptSetCreation <- function(conceptName,
+.fullConceptSetCreation <- function(conceptSetTarget,
                                     originalConceptList,
                                     excludedConcepts = "none",
                                     llmClient,
@@ -24,7 +24,7 @@
                                     minCount = 0,
                                     belowMinimumCountApproach,
                                     outputDirectory,
-                                    additionalInformation = "",
+                                    clinicalDefinition = "",
                                     excludedVocabularies = c("ICDO3"),
                                     clinicalContext = "any clinical context",
                                     bucketSize = 1,
@@ -48,8 +48,8 @@
     llmResults <- utils::read.csv(file.path(outputDirectory, paste0("firstPart_", conditionForFiles, tryNumber, ".csv")))
   } else {
     llmResults <- .createRecommendListViaLlmFromConceptList(
-      query = conceptName,
-      closestConditionConcept = conceptName,
+      query = conceptSetTarget,
+      closestConditionConcept = conceptSetTarget,
       conceptList = originalConceptList,
       llmClient = llmClient,
       connection = connection,
@@ -60,15 +60,20 @@
       previousResults = NULL,
       excludedConcepts = excludedConcepts,
       belowMinimumCountApproach,
-      additionalInformation = additionalInformation,
+      clinicalDefinition = clinicalDefinition,
       clinicalContext = clinicalContext,
       excludedVocabularies = c(excludedVocabularies),
       domain = domain,
       phoebeExclusions = phoebeExclusions,
-      bucketSize = bucketSize
+      bucketSize = bucketSize,
+      conditionForFiles = conditionForFiles,
+      outputDirectory = outputDirectory
     )
-
-    utils::write.csv(llmResults, file.path(outputDirectory, paste0("firstPart_", conditionForFiles, tryNumber, ".csv")), row.names = F)
+    if(is.null(llmResults)) {
+      return(NULL)
+    } else {
+      utils::write.csv(llmResults, file.path(outputDirectory, paste0("firstPart_", conditionForFiles, tryNumber, ".csv")), row.names = F)
+    }
   }
 
   previousResults <- llmResults
@@ -95,8 +100,8 @@
 
   #second pass for the included concept descendants
   llmResults <- .createRecommendListViaLlmFromConceptList(
-    query = conceptName,
-    closestConditionConcept = conceptName,
+    query = conceptSetTarget,
+    closestConditionConcept = conceptSetTarget,
     conceptList = conceptList,
     llmClient = llmClient,
     connection = connection,
@@ -107,17 +112,19 @@
     previousResults = previousResults,
     excludedConcepts = excludedConcepts,
     belowMinimumCountApproach,
-    additionalInformation = additionalInformation,
+    clinicalDefinition = clinicalDefinition,
     clinicalContext = clinicalContext,
     excludedVocabularies = c(excludedVocabularies),
     domain = domain,
-    bucketSize = bucketSize
+    bucketSize = bucketSize,
+    conditionForFiles = conditionForFiles,
+    outputDirectory = outputDirectory
   )
 
   return(llmResults)
 }
 
-.getFullConceptSet <- function(conceptName,
+.getFullConceptSet <- function(conceptSetTarget,
                                conceptIds,
                                domains,
                                conceptClasses = "",
@@ -129,7 +136,7 @@
                                minCount,
                                belowMinimumCountApproach,
                                exclusions = "TEST", #default is to test for exclusions - call with set to "none" if no testing wanted
-                               additionalInformation = "",
+                               clinicalDefinition = "",
                                excludedVocabularies = c("ICDO3"),
                                excludedConcepts,
                                clinicalContext =  "",
@@ -165,7 +172,7 @@
   if(recordCount <= 5000) { # reasonable size concept set to test
     #test to see if any concepts should be explicitly excluded
     if(exclusions == "TEST") {
-      exclusions <- .checkForExclusions(term = conceptName, llmClient = llmClient)
+      exclusions <- .checkForExclusions(term = conditionForFiles, llmClient = llmClient)
       if(exclusions$yesNo == "YES") {
         excludedConditions <- exclusions$exclusions
       } else {
@@ -176,7 +183,7 @@
     }
 
     #create the concept set
-    finalConceptSet <- .fullConceptSetCreation(conceptName = conceptName,
+    finalConceptSet <- .fullConceptSetCreation(conceptSetTarget = conceptSetTarget,
                                                originalConceptList = conceptIds,
                                                excludedConcepts = excludedConcepts,
                                                llmClient = llmClient,
@@ -186,7 +193,7 @@
                                                minCount = minCount,
                                                belowMinimumCountApproach = belowMinimumCountApproach,
                                                outputDirectory = outputDirectory,
-                                               additionalInformation = additionalInformation,
+                                               clinicalDefinition = clinicalDefinition,
                                                excludedVocabularies = c("ICDO3"),
                                                clinicalContext = clinicalContext,
                                                bucketSize = bucketSize,
@@ -201,7 +208,7 @@
     finalConceptSet <- NULL
     finalConceptSet$conceptId <- conceptIds
     finalConceptSet$suggestedConcept <- ""
-    finalConceptSet$mainCondition <- conceptName
+    finalConceptSet$mainCondition <- conceptSetTarget
     finalConceptSet$finalAnswer <- "YES"
     finalConceptSet$rationaleForAnswer <- ""
     finalConceptSet$confidenceLevel <- ""
@@ -502,7 +509,7 @@ WHERE concept_id IN (@concept_ids)
                           connectionDetails,
                           connection,
                           cdmDatabaseSchema,
-                          additionalInformation,
+                          clinicalDefinition,
                           clinicalContext,
                           minCount = 0,
                           belowMinimumCountApproach = "TEST ALL",
@@ -510,7 +517,10 @@ WHERE concept_id IN (@concept_ids)
                           tryNumber = 1,
                           outputDirectory,
                           phoebeExclusions,
-                          standardOnly) {
+                          standardOnly,
+                          bucketSize) {
+
+  hecateSearchString <- getClinicalSynonyms(searchString)$synonymousBucketNames
 
   if (file.exists(file.path(outputDirectory, paste0(conditionForFiles,
                                                     "_from_embVectors.csv")))) {
@@ -524,13 +534,14 @@ WHERE concept_id IN (@concept_ids)
                                                                           "_from_embVectors.csv")))
   } else {
     #get seed concepts from hecate
+    message(paste0("Searching Hecate for the following: ", hecateSearchString))
     if(standardOnly == TRUE) {
-      seeds <- .vectorSearchStandard(term = searchString,
+      seeds <- .vectorSearchStandard(term = hecateSearchString,
                                      domains = domains,
                                      conceptClasses = classes,
                                      limit = vectorSearchSize)
     } else {
-      seeds <- .vectorSearch(term = searchString,
+      seeds <- .vectorSearch(term = hecateSearchString,
                              domains = domains,
                              # conceptClasses = classes,
                              limit = vectorSearchSize)
@@ -548,9 +559,10 @@ WHERE concept_id IN (@concept_ids)
                                                          connection = connection,
                                                          cdmDatabaseSchema = cdmDatabaseSchema,
                                                          excludedConcepts = "none",
-                                                         additionalInformation = additionalInformation,
+                                                         clinicalDefinition = clinicalDefinition,
                                                          clinicalContext = clinicalContext,
-                                                         bucketSize = 20)
+                                                         conditionForFiles = conditionForFiles,
+                                                         bucketSize = bucketSize)
 
     if(!is.null(prelimLlmResults)) {
       utils::write.csv(prelimLlmResults, file.path(outputDirectory, paste0(conditionForFiles,
@@ -561,7 +573,7 @@ WHERE concept_id IN (@concept_ids)
   message("\nTesting viable concept candidates, their descendants, and PHOEBE recommendations...")
   conceptList <- as.numeric(c(prelimLlmResults$conceptId[prelimLlmResults$finalAnswer == "YES"]))
   if(length(conceptList) > 0) {
-    llmResults <- .getFullConceptSet(conceptName = searchString,
+    llmResults <- .getFullConceptSet(conceptSetTarget = searchString,
                                      conceptIds = conceptList,
                                      llmClient = llmClient,
                                      minCount = minCount,
@@ -569,7 +581,7 @@ WHERE concept_id IN (@concept_ids)
                                      domains = domains,
                                      excludedConcepts = excludedConcepts,
                                      conceptClasses = classes,
-                                     additionalInformation = additionalInformation,
+                                     clinicalDefinition = clinicalDefinition,
                                      clinicalContext = clinicalContext,
                                      connection = connection,
                                      connectionDetails = connectionDetails,
@@ -578,7 +590,7 @@ WHERE concept_id IN (@concept_ids)
                                      tryNumber = tryNumber,
                                      outputDirectory = outputDirectory,
                                      phoebeExclusions = phoebeExclusions,
-                                     bucketSize = 20)
+                                     bucketSize = bucketSize)
   } else {
     message("There are no viable concept candidates for this concept set.")
     return(NULL)
@@ -651,7 +663,7 @@ getDrugClass <- function(drugName) {
             # drugNameInformation$dosageFormYesNo == "YES" &
             drugNameInformation$drugStrengthYesNo ==  "YES" &
             drugNameInformation$drugBrandYesNo ==  "NO" ) {
-    class <- "Clinical Drug, Quant Clinical Drug"
+    class <- "Clinical Drug"
   } else if(drugNameInformation$routeOfAdministrationYesNo == "YES" &
             drugNameInformation$dosageFormYesNo == "YES" &
             drugNameInformation$drugStrengthYesNo ==  "NO" &
@@ -666,7 +678,7 @@ getDrugClass <- function(drugName) {
             drugNameInformation$dosageFormYesNo == "YES" &
             drugNameInformation$drugStrengthYesNo ==  "YES" &
             drugNameInformation$drugBrandYesNo ==  "YES" ) {
-    class <- "Branded Drug, Quant Branded Drug, Marketed Product"
+    class <- "Branded Drug"
   } else if(drugNameInformation$multipleDrugYesNo == "YES")  { #best fit for multiple active ingredients
     class <- "Clinical Drug Form"
   } else {
@@ -683,9 +695,10 @@ getDrugClass <- function(drugName) {
                                llmClientNonReasoning,
                                connectionDetails,
                                cdmDatabaseSchema,
-                               additionalInformation = "",
+                               clinicalDefinition = "",
                                outputDirectory,
-                               clinicalContext = "") {
+                               clinicalContext = "",
+                               bucketSize) {
 
   connection3 <- suppressMessages(DatabaseConnector::connect(connectionDetails = connectionDetails))
   on.exit(DatabaseConnector::disconnect(connection3))
@@ -728,6 +741,7 @@ getDrugClass <- function(drugName) {
       updatedLines <- gsub("SEARCH_TERM", llmSearchString, originalLines)
 
       updatedLines <- gsub("CURRENT_LIST", paste0(fullDrugList$drugName, collapse = "; "), updatedLines)
+      updatedLines <- gsub("ADDITIONAL_INFORMATION", clinicalDefinition, updatedLines)
       updatedLines <- gsub("START_NUMBER", startNumber, updatedLines)
       updatedLines <- gsub("NEXT_NUMBER", nextNumber, updatedLines)
 
@@ -811,7 +825,7 @@ getDrugClass <- function(drugName) {
     )
     llmConceptSet <- utils::read.csv(file.path(outputDirectory, paste0(searchString, "1.csv")))
   } else { #get llm to adjudicate the concepts
-    conceptList <- conceptList[,c("conceptId", "conceptName", "domainId", "vocabularyId", "conceptClassId", "standardConcept",
+    conceptList <- conceptList[,c("conceptId", "conceptSetTarget", "domainId", "vocabularyId", "conceptClassId", "standardConcept",
                                   "conceptCode")]
     conceptList <- unique(conceptList)
     conceptList <- conceptList[!is.null(conceptList$conceptId),]
@@ -828,9 +842,10 @@ getDrugClass <- function(drugName) {
                                                         connection = connection3,
                                                         cdmDatabaseSchema = cdmDatabaseSchema,
                                                         excludedConcepts = "none",
-                                                        additionalInformation = additionalInformation,
+                                                        clinicalDefinition = clinicalDefinition,
                                                         clinicalContext = clinicalContext,
-                                                        bucketSize = 20)
+                                                        conditionForFiles = conditionForFiles,
+                                                        bucketSize = bucketSize)
     } else {
       message(paste0("No concept Ids found for ", searchString, " perhaps try a different drug name."))
       return(NULL)
@@ -869,6 +884,7 @@ getDrugClass <- function(drugName) {
   )
 
   conceptList <- DatabaseConnector::querySql(connection = connection, sql = sql, snakeCaseToCamelCase = TRUE)
+  conceptList$conceptSetTarget <- conceptList$conceptName
 
   domains <- unique(conceptList$domainId)
 
@@ -914,13 +930,13 @@ resolveConceptSet <- function(conceptSet, #in list form
 
 # log_call_params: log the parameters of the calling function to a CSV file
 logCallParams <- function(output_dir,
-                            filename_prefix = NULL,
-                            exclude = character(),                      # names to always exclude
-                            redact_patterns = c("password", "pass", "pwd",
-                                                "secret", "token", "key",
-                                                "connection", "cred", "private"),
-                            redact_replace = "<REDACTED>",
-                            parent = parent.frame()) {
+                          filename_prefix = NULL,
+                          exclude = character(),                      # names to always exclude
+                          redact_patterns = c("password", "pass", "pwd",
+                                              "secret", "token", "key",
+                                              "connection", "cred", "private"),
+                          redact_replace = "<REDACTED>",
+                          parent = parent.frame()) {
   # Basic validation / ensure output dir
   if (missing(output_dir) || is.null(output_dir) || output_dir == "") {
     stop("Please provide a valid output_dir (e.g. outputDirectory from your function).")
@@ -1007,3 +1023,93 @@ logCallParams <- function(output_dir,
 
   invisible(filename)
 }
+
+removeClearNo <- function(query,
+                          conceptList,
+                          llmClient,
+                          clinicalDefinition = "",
+                          clinicalContext = "",
+                          bucketSize = 200) {
+
+  promptUp <- system.file("prompts", "LLM_Prompt_for_PHOEBE_generic_clear_no.txt", package = "Phenelope")
+  originalLines <- readLines(promptUp)
+
+  results <- NULL
+  startPoint <- 1
+  endPoint <- min(bucketSize, nrow(conceptList))
+  while(startPoint <= nrow(conceptList)) {
+    cat(paste0("--Querying LLM for ", query, " - Analyzing concepts ", startPoint, " through ", endPoint, " of ", nrow(conceptList), "  \r"))
+    conceptList$aboveMin[1] <- T # always test the first concept
+
+    testCondition <- conceptList[startPoint:endPoint, c("conceptId", "conceptSetTarget")]
+    baseCondition <- query
+
+    updatedLines <- gsub("MAIN_CONCEPT", baseCondition, originalLines)
+
+    json_all <- jsonlite::toJSON(testCondition)
+    updatedLines <- gsub("SUGGESTED_CONCEPT", json_all, updatedLines)
+    updatedLines <- gsub("CLINICAL_CONTEXT", clinicalContext, updatedLines)
+    updatedLines <- gsub("ADDITIONAL_INFORMATION", clinicalDefinition, updatedLines)
+
+    prompt <- paste(updatedLines, collapse = "\n")
+    lastPrompt <- prompt
+    Phenelope:::saveLastPrompt(prompt)
+
+    systemPrompt <- "You are an expert medical doctor specializing in healthcare data analysis. Your primary function is to analyze healthcare data, including electronic health records, to infer causal relationships between exposures and health outcomes."
+
+    llmClient$set_system_prompt(systemPrompt)
+
+    ellmerTypeObject <- ellmer::type_array(ellmer::type_object(
+      conceptId = ellmer::type_string(),
+      suggestedConcept = ellmer::type_string(),
+      rationale = ellmer::type_string()
+    ))
+
+    newConceptList <- queryLLM(llmClient = llmClient,
+                               prompt,
+                               systemPrompt = systemPrompt,
+                               ellmerTypeObject = ellmerTypeObject)
+
+    llmClient$set_turns(list()) # Reset the chat
+    startPoint <- endPoint + 1
+    endPoint <- min(startPoint + bucketSize, nrow(conceptList))
+
+    if(nrow(newConceptList) > 0 & ncol(newConceptList) == 4) {
+      newConceptList$tested <- T
+
+      newConceptList$mainCondition <- baseCondition
+      newConceptList$model <- llmClient$get_model()
+      results <- rbind(results, newConceptList)
+    }
+  }
+
+
+  return(results)
+}
+
+getClinicalSynonyms <- function(concept) {
+  promptUp <- system.file("prompts", "clinicalSynonyms.txt", package = "Phenelope")
+  originalLines <- readLines(promptUp)
+
+  updatedLines <- gsub("MAIN_CONCEPT", concept, originalLines)
+
+  prompt <- paste(updatedLines, collapse = "\n")
+  lastPrompt <- prompt
+  Phenelope:::saveLastPrompt(prompt)
+
+  systemPrompt <- "You are an expert medical doctor specializing in healthcare data analysis. Your primary function is to analyze healthcare data, including electronic health records, to infer causal relationships between exposures and health outcomes."
+
+  llmClient$set_system_prompt(systemPrompt)
+
+  ellmerTypeObject <- ellmer::type_object(
+    mainConcept = ellmer::type_string(),
+    synonymousBucketNames = ellmer::type_string())
+
+  results <- queryLLM(llmClient = llmClient,
+                             prompt,
+                             systemPrompt = systemPrompt,
+                             ellmerTypeObject = ellmerTypeObject)
+
+  return(results)
+}
+

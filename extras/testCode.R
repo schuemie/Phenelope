@@ -75,7 +75,7 @@ HELLPsyndrome <- list(conceptList = c(4316372), #list of seed concepts to start 
                       conceptSetName = "[LLM Test] HELLP syndrome", #what you want the concept set in ATLAS to be called
                       outputFolder = "p:/shared/llm/HELLP syndrome", #where you want the final artifacts to be saved
                       clinicalContext = "patients in general population", #if you want a concept set specific to a prior condition, add it here
-                      additionalInformation = "", #added information for the prompt
+                      clinicalDefinition = "", #added information for the prompt
                       tries = 1, #the number of times you want llm to go through the list if you are concerned about consistency
                       successes = 1) #the number of successes (Ubiquitous) responses that must be achieved to include concept
 
@@ -88,7 +88,7 @@ agitation <- list(conceptList = c(4086746), #list of seed concepts to start the 
                   conceptSetName = "[Epi1314] agitation 2", #what you want the concept set in ATLAS to be called
                   outputFolder = "p:/shared/llm/Epi1314/agitation 2", #where you want the final artifacts to be saved
                   clinicalContext = "patients with dementia", #if you want a concept set specific to a prior condition, add it here
-                  additionalInformation = "", #added information for the prompt
+                  clinicalDefinition = "", #added information for the prompt
                   tries = 1, #the number of times you want llm to go through the list if you are concerned about consistency
                   successes = 1) #the number of successes (Ubiquitous) responses that must be achieved to include concept
 
@@ -101,7 +101,7 @@ psychosis <- list(conceptList = c(436073), #list of seed concepts to start the a
                   conceptSetName = "[Epi1314] Psychosis 2", #what you want the concept set in ATLAS to be called
                   outputFolder = "p:/shared/llm/Epi1314/psychosis 2", #where you want the final artifacts to be saved
                   clinicalContext = "patients with dementia", #if you want a concept set specific to a prior condition, add it here
-                  additionalInformation = "", #added information for the prompt
+                  clinicalDefinition = "", #added information for the prompt
                   tries = 1, #the number of times you want llm to go through the list if you are concerned about consistency
                   successes = 1) #the number of successes (Ubiquitous) responses that must be achieved to include concept
 
@@ -114,7 +114,7 @@ CopdExacerbation <- list(conceptList = c(257004, 4110056, 43530693, 46269701, 41
                          conceptSetName = "[LLM] COPD Exacerbation",
                          outputFolder = "p:/shared/llm/COPD Exacerbation",
                          clinicalContext = "in general population",
-                         additionalInformation = "",
+                         clinicalDefinition = "",
                          tries = 1,
                          successes = 1)
 
@@ -127,7 +127,7 @@ acuteAbdominalPain <- list(conceptList = c(200219),
                          conceptSetName = "[LLM] Acute Abdominal Pain",
                          outputFolder = "p:/shared/llm/Lower Respiratory Tract Infection",
                          clinicalContext = "in general population",
-                         additionalInformation = "",
+                         clinicalDefinition = "",
                          tries = 1,
                          successes = 1)
 
@@ -140,7 +140,7 @@ malignantSolidTumors <- list(conceptList = c(439392),
                            conceptSetName = "[LLM] malignant solid tumors",
                            outputFolder = "p:/shared/llm/Evanette/malignant solid tumors",
                            clinicalContext = "in general population",
-                           additionalInformation = "",
+                           clinicalDefinition = "",
                            tries = 1,
                            successes = 1)
 
@@ -161,7 +161,7 @@ conditionList <- list(psychosis)
 
 for(conditionUp in 1:length(conditionList)) {
   ROhdsiWebApi::authorizeWebApi(baseUrl, "windows") # Windows
-  finalSet <- executeLlmConceptCreate(conceptName = conditionList[[conditionUp]]$condition,
+  finalSet <- executeLlmConceptCreate(conceptSetTarget = conditionList[[conditionUp]]$condition,
                                       originalConceptList = conditionList[[conditionUp]]$conceptList,
                                       excludedConditions = conditionList[[conditionUp]]$excludedConditions,
                                       tries = conditionList[[conditionUp]]$tries,

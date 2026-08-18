@@ -26,7 +26,7 @@
                                                       previousResults,
                                                       excludedConditions = "none",
                                                       belowMinimumCountApproach = "TEST ALL",
-                                                      additionalInformation = "",
+                                                      clinicalDefinition = "",
                                                       clinicalContext = "",
                                                       excludedVocabularies = c("ICDO3"),
                                                       bucketSize) {
@@ -100,8 +100,8 @@
 
       # Filter rows
       concepts <- concepts[!(
-        sapply(concepts$conceptName, function(x) any(grepl(paste(excludeWords, collapse = "|"), x))) &
-          !sapply(concepts$conceptName, function(x) any(grepl(paste(exceptionWords, collapse = "|"), x)))
+        sapply(concepts$conceptSetTarget, function(x) any(grepl(paste(excludeWords, collapse = "|"), x))) &
+          !sapply(concepts$conceptSetTarget, function(x) any(grepl(paste(exceptionWords, collapse = "|"), x)))
       ), ]
 
       concepts <- rbind(concepts, conceptList)
@@ -116,7 +116,7 @@
   }
 
   if (nrow(recs) != 0) { # no phoebe recs
-    concepts <- merge(concepts, unique(recs[, c("conceptId", "conceptName", "recordCount")]), all.x = T)
+    concepts <- merge(concepts, unique(recs[, c("conceptId", "conceptSetTarget", "recordCount")]), all.x = T)
   } else { # no phoebe recs
     concepts$recordCount <- NA
   }
@@ -141,7 +141,7 @@
   if (type != "phoebe") { # add in the main concept on the second pass through
     temp <- conceptsToUse[1, ]
     temp$conceptId <- closestConditionConcept
-    temp$conceptName <- query
+    temp$conceptSetTarget <- query
     conceptsToUse <- rbind(conceptsToUse, temp)
   }
 
@@ -166,7 +166,7 @@
     } else { #add concept to listed of untested as per min count and disposition
       resultsDf <- NULL
       resultsDf$conceptId <- concepts$conceptId[[conceptUp]]
-      resultsDf$suggestedCondition <- concepts$conceptName[[conceptUp]]
+      resultsDf$suggestedCondition <- concepts$conceptSetTarget[[conceptUp]]
       resultsDf$mainCondition <- baseCondition
       resultsDf$excludedConditions <-  ""
       resultsDf$proposedInExcluded <-  ""
@@ -205,7 +205,7 @@
     concepts <- testList
   }
 
-  concepts$conceptName <- gsub("[\\[\\]]", " ", concepts$conceptName) #remove any [ or ] from name (interferes with json structure)
+  concepts$conceptSetTarget <- gsub("[\\[\\]]", " ", concepts$conceptSetTarget) #remove any [ or ] from name (interferes with json structure)
   if (nrow(concepts) != 0) {
     startPoint <- 1
     endPoint <- min(bucketSize, nrow(concepts))
@@ -218,7 +218,7 @@
       #     cat(paste0("\r--Querying LLM - Analyzing ", conceptUp, " of ", nrow(concepts)))
       #   }
 
-      testCondition <- concepts[startPoint:endPoint, c("conceptId", "conceptName")]
+      testCondition <- concepts[startPoint:endPoint, c("conceptId", "conceptSetTarget")]
       # testConceptId <- concepts$conceptId[[conceptUp]]
       baseCondition <- query
 
@@ -227,7 +227,7 @@
       updatedLines <- gsub("SUGGESTED_CONDITION", json_all, updatedLines)
       updatedLines <- gsub("EXCLUDED_CONDITIONS", excludedConditions, updatedLines)
       updatedLines <- gsub("CLINICAL_CONTEXT", clinicalContext, updatedLines)
-      updatedLines <- gsub("ADDITIONAL_INFORMATION", additionalInformation, updatedLines)
+      updatedLines <- gsub("ADDITIONAL_INFORMATION", clinicalDefinition, updatedLines)
 
       prompt <- paste(updatedLines, collapse = "\n")
 

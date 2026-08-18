@@ -16,7 +16,7 @@ C7: Does the string infer multiple active ingredients in a single formulation
 General rules:
 G1: The inclusion of terms within a string like "high potency", "high strength", "prescription level" imply strength, so drug strength is true
 G2: Terms like "emollient" and "cream" imply both a dosage form AND a route of administration
-G3: Terms like "Long acting", "6 month" imply a specific drug strength
+G3: Terms like "Long acting", "short acting", "6 month", or any label that implies a length of time for a drug to be effective imply a specific drug strength
 G4: Terms like "systemic" imply multiple routes of administration, in this case, oral, IV, etc.
 G5: There are differences between "long acting" oral medications and "long acting" injectable medications.
 For orals, consider the following aspects in your decision:

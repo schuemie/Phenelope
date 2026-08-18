@@ -87,7 +87,7 @@ Once you have the necessary information, you are ready to create you concept set
 ```{r tidy=FALSE,eval=FALSE}
 # run the
 finalSet <- Penelope::createConceptSet(
-  conceptName = "Type 2 Diabetes Mellitus",
+  conceptSetTarget = "Type 2 Diabetes Mellitus",
   originalConceptList = c(201826),
   llmClient = llmClient,
   connectionDetails = connectionDetails,
@@ -100,7 +100,7 @@ The following are additional parameters that may be set but aren't required:
 
 1.  excludedConditions - Names of conditions to be excluded from the concept set.
 2.  minCount - Minimum cell subject count to use for concepts.
-3.  additionalInformation - Additional information for concept development. This may include any specific details that are desired for the concepts, for example, "only in women"
+3.  clinicalDefinition - Additional information for concept development. This may include any specific details that are desired for the concepts, for example, "only in women"
 4.  clinicalContext Optional clinical context for the LLM to determine appropriateness of a concept, for example, "following surgery" would include concepts whose name indicates it happened post-surgery.
 5.  belowMinimumCountApproach How to treat concepts below the minimum count. One of "TEST ALL", "TEST PHOEBE", "EXCLUDE ALL", or "INCLUDE ALL":
 

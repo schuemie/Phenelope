@@ -51,26 +51,6 @@ S6) If specific concept(s) has an OR clause, the proposed concept should be incl
 Example: For the specific concept "leukocytosis or neutrophilia condition", include any proposed concept that is correct for leukocytosis OR neutrophilia.
 S7) If specific concept(s) has an AND clause, the proposed concept should be included if it is correct for EITHER of the parts of the specific condition.
 Example: For the specific concept "nausea and vomiting condition", include any proposed concept that is correct for nausea OR vomiting.
-S8) Classify the stability of your YES/NO decision.
-S8) confidenceLevel
-
-CLEAR
-- A knowledgeable ontologist would be highly likely to reach the same answer.
-
-BORDERLINE
-- Either:
-  (a) a knowledgeable ontologist could reasonably reach the opposite answer
-  OR
-  (b) the wording or relationship introduces elevated risk of answer variability across runs.
-S9) Only if confidenceLevel is BORDERLINE, provide the rationaleForAnswer.
-
-If confidenceLevel is CLEAR:
-- Provide a brief rationale of no more than 15 words.
-- Do not discuss competing interpretations.
-
-If confidenceLevel is BORDERLINE:
-- Explain the strongest reason for inclusion and the strongest reason for exclusion.
-- Then provide the final determination.
 
 NOTE: there may be more than one proposed concept to evaluate.  Evaluate each one SEPARATELY and provide a complete answer for each proposed concept.
 Here is your data to analyze:
@@ -88,7 +68,7 @@ Give a JSON-structured summary for the following (DO NOT ADD ANY OTHER NON-JSON 
     "proposedInExcluded": "Is proposed concept in the excluded concepts (EXCLUDED_CONCEPTS)? (YES or NO)",
     "finalAnswer": "Do the vast majority (> 95%) of instances of the proposed concept make it a part of MAIN_CONCEPT in the current clinical context (CLINICAL_CONTEXT)? [IMPORTANT Answer ONLY as: 'YES', 'NO' (DO NOT REPEAT THE QUESTION IN YOUR ANSWER!)]",
     "rationaleForAnswer": "Provide a rationale for your answer INCLUDING the rule above that was satisfied",
-    "confidenceLevel": "CLEAR or BORDERLINE"
+    "confidenceLevel": "What is your confidence level for your answer? [Only answer as: 0% - 100%]"
 
   }
 ]

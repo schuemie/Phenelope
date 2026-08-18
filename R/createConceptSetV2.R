@@ -22,7 +22,7 @@
 #' @details
 #' This function will create a concept set starting from a clinical condition and a concept id.
 #'
-#' @param conceptName Character. Name of the concept pointing to the clinical condition.
+#' @param conceptSetTarget Character. Name of the concept pointing to the clinical condition.
 #' @param originalConceptList Integer or character vector. List of concept ids to use as a starting point.
 #' @param excludedConcepts Character. Names of concepts to be excluded from the concept set.
 #' @param llmClientReasoning connection object for the LLM client (see ellmer package for object details) for a reasoning model such as OpenAI o3
@@ -47,7 +47,7 @@
 #'              consensus vote from multiple LLM iterations.
 #' @param successes Integer. How many successes required to include a concept. The package allows for multiple runs of the same concept to
 #'                  get a consensus vote from multiple LLM iterations.
-#' @param additionalInformation Character. Additional information for concept development.  This may include any specific details that
+#' @param clinicalDefinition Character. Clinical definition for concept setdevelopment.  This may include any specific details that
 #'                              are desired for the concepts, for example, "only in women"
 #' @param clinicalContext Character. Optional clinical context for the LLM to determine appropriateness of a concept, for example,
 #'                                  "following surgery" would include concepts whose name indicates it happened post-surgery.
@@ -59,7 +59,7 @@
 #' @return Final results set as a list of two elements 1) a data frame of the LLM results for each tested concept
 #'                                                     and 2) a JSON object ready for porting into ATLAS if successful, FALSE if unsuccessful.
 #' @export
-createConceptSet <- function(conceptName,
+createConceptSet <- function(conceptSetTarget,
                              originalConceptList = c(),
                              excludedConcepts = "none",
                              llmClientReasoning,
@@ -72,11 +72,11 @@ createConceptSet <- function(conceptName,
                              outputDirectory,
                              tries = 1,
                              successes = 1,
-                             additionalInformation = "",
+                             clinicalDefinition = "",
                              excludedVocabularies = c("ICDO3"),
                              condenseConceptSet = TRUE,
                              clinicalContext = "any clinical context",
-                             bucketSize = 1,
+                             bucketSize = 20,
                              standardOnly = TRUE,
                              quickRun = FALSE) {
   errorMessages <- checkmate::makeAssertCollection()
@@ -91,7 +91,7 @@ createConceptSet <- function(conceptName,
 
   checkmate::assertCharacter(excludedConcepts, len = 1, add = errorMessages)
 
-  checkmate::assertCharacter(conceptName, len = 1, add = errorMessages)
+  checkmate::assertCharacter(conceptSetTarget, len = 1, add = errorMessages)
   if(length(originalConceptList) > 0) {
     checkmate::assertIntegerish(originalConceptList, min.len = 0, add = errorMessages)
   }
@@ -106,7 +106,7 @@ createConceptSet <- function(conceptName,
                           add = errorMessages
   )
   checkmate::assertCharacter(outputDirectory, len = 1, add = errorMessages)
-  checkmate::assertCharacter(additionalInformation, len = 1, null.ok = TRUE, add = errorMessages)
+  checkmate::assertCharacter(clinicalDefinition, len = 1, null.ok = TRUE, add = errorMessages)
   checkmate::assertCharacter(clinicalContext, len = 1, null.ok = TRUE, add = errorMessages)
   checkmate::assertCharacter(clinicalContext, len = 1, null.ok = TRUE, add = errorMessages)
   checkmate::assertLogical(condenseConceptSet, add = errorMessages)
@@ -127,7 +127,7 @@ createConceptSet <- function(conceptName,
   )
   llmClient <- llmClientReasoning #use the reasoning model for most instances
 
-  message("\nDeveloping a concept set for: ", conceptName, "\n")
+  message("\nDeveloping a concept set for: ", conceptSetTarget, "\n")
   connection <- suppressMessages(DatabaseConnector::connect(connectionDetails = connectionDetails))
   on.exit(DatabaseConnector::disconnect(connection))
 
@@ -136,14 +136,14 @@ createConceptSet <- function(conceptName,
     if (!success) stop("Failed to create directory: ", outputDirectory)
   }
 
-  conditionForFiles <- gsub("/", "-", conceptName) # remove slashes
+  conditionForFiles <- gsub("/", "-", conceptSetTarget) # remove slashes
   conditionForFiles <- paste(utils::head(unlist(strsplit(conditionForFiles, " ")), 100), collapse = " ")
   if (excludedConcepts == "") {
     excludedConcepts <- "None"
   }
 
   #get domain to determine analysis
-  domainToUse <- .getDomain(llmClient = llmClient, searchString = conceptName)$domain
+  domainToUse <- .getDomain(llmClient = llmClient, searchString = conceptSetTarget)$domain[[1]]
 
   if(domainToUse %in% c("DRUG")) { #concept set for drugs
     condenseConceptSet <- FALSE #don't need to do this for drugs
@@ -167,7 +167,7 @@ createConceptSet <- function(conceptName,
       next
     }
 
-    searchString <- gsub(" codes", "", conceptName) #strip off the suffix
+    searchString <- gsub(" codes", "", conceptSetTarget) #strip off the suffix
 
     if(quickRun == FALSE) {#need to go through the multi-stage process rather than a simple test
       #NOTE: currently not using classes - leaving them in as placeholder for future
@@ -176,23 +176,27 @@ createConceptSet <- function(conceptName,
         domains <- c("Condition", "Observation")
         classes <- c("Disorder", "HCPCS", 	"Clinical Observation", "Clinical Finding")
         phoebeExclusions <- c() #no exclusions for conditions
+        vectorSearchSize <- 25
 
       } else if(domainToUse %in% c("PROCEDURE")) {
         domains <- c("Procedure","Device", "Observation")
         classes <- c("Procedure", "CPT4", "Clinical Observation")
         phoebeExclusions <- c("Ontology-parent") #not valuable for procedures
+        vectorSearchSize <- 200
 
       } else if(domainToUse %in% c("MEASUREMENT")) {
         #get seed concept ids from hecate
         domains <- c("Measurement", "Observation")
         classes <- c("CPT4", "Clinical Observation", "Procedure", "Lab Test")
         phoebeExclusions <- c("Ontology-parent") #not valuable for measurements
+        vectorSearchSize <- 200
 
       } else if(domainToUse %in% c("VISIT")) {
         #get seed concept ids from hecate
         domains <- c("Visit", "Provider", "Procedure", "Observation")
         classes <- c("Visit")
         phoebeExclusions <- c("Ontology-parent") #not valuable for visits
+        vectorSearchSize <- 200
 
         #test to see if it is for a specialty visit
         ellmerTypeObject <- ellmer::type_array(ellmer::type_object(
@@ -222,7 +226,8 @@ createConceptSet <- function(conceptName,
         #get seed concept ids from hecate
         domains <- c("Procedure", "Device", "Observation")
         classes <- c("Physical Object")
-        phoebeExclusions <- c("Ontology-parent") #not valuable for devics
+        phoebeExclusions <- c("Ontology-parent") #not valuable for devices
+        vectorSearchSize <- 200
 
       } else if(domainToUse %in% c("DRUG")) {
         #get seed concept ids from hecate
@@ -235,9 +240,10 @@ createConceptSet <- function(conceptName,
                                          cdmDatabaseSchema = cdmDatabaseSchema,
                                          llmClientReasoning,
                                          llmClientNonReasoning,
-                                         additionalInformation = additionalInformation,
+                                         clinicalDefinition = clinicalDefinition,
                                          outputDirectory = outputDirectory,
-                                         clinicalContext = clinicalContext)
+                                         clinicalContext = clinicalContext,
+                                         bucketSize = bucketSize)
 
       } else { #concept set for all others
         #create the concept sets for the item
@@ -246,11 +252,11 @@ createConceptSet <- function(conceptName,
                                     domains = domains,
                                     classes = NULL, #classes,
                                     excludedConcepts = excludedConcepts,
-                                    vectorSearchSize = 200,
+                                    vectorSearchSize = vectorSearchSize,
                                     connectionDetails = connectionDetails,
                                     connection = connection,
                                     cdmDatabaseSchema = cdmDatabaseSchema,
-                                    additionalInformation = additionalInformation,
+                                    clinicalDefinition = clinicalDefinition,
                                     clinicalContext = clinicalContext,
                                     minCount = minCount,
                                     belowMinimumCountApproach = belowMinimumCountApproach,
@@ -258,7 +264,8 @@ createConceptSet <- function(conceptName,
                                     tryNumber = tryNumber,
                                     outputDirectory = outputDirectory,
                                     phoebeExclusions = phoebeExclusions,
-                                    standardOnly = standardOnly)
+                                    standardOnly = standardOnly,
+                                    bucketSize = bucketSize)
 
       }
 
@@ -277,7 +284,7 @@ createConceptSet <- function(conceptName,
         }
       }
 
-      llmResults <- .createRecommendListFromConcepts(query = conceptName,
+      llmResults <- .createRecommendListFromConcepts(query = conceptSetTarget,
                                                      conceptList = originalConceptList,
                                                      prompt = promptToUse,
                                                      llmClient = llmClientNonReasoning,
@@ -285,8 +292,9 @@ createConceptSet <- function(conceptName,
                                                      connectionDetails = connectionDetails,
                                                      cdmDatabaseSchema = cdmDatabaseSchema,
                                                      excludedConcepts = excludedConcepts,
-                                                     additionalInformation = additionalInformation,
+                                                     clinicalDefinition = clinicalDefinition,
                                                      clinicalContext = clinicalContext,
+                                                     conditionForFiles = conditionForFiles,
                                                      bucketSize = bucketSize)
       return(llmResults)
     }

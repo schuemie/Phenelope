@@ -20,6 +20,11 @@ llmClient <- ellmer::chat_azure_openai(
   endpoint = gsub("/openai/deployments.*", "", keyring::key_get("genai_gpt4o_endpoint")),
   api_version = "2023-03-15-preview",
   model = "gpt-4o",
+  api_args = list(
+    temperature = 0,
+    top_p = 1,
+    seed = 1234
+  ),
   credentials = function() keyring::key_get("genai_api_gpt4_key")
 )
 
@@ -41,8 +46,8 @@ ccaeConnection <- list(cdmDatabaseSchema = paste0("merative_ccae.cdm_merative_cc
 database <- ccaeConnection
 
 #example - these are the parameters you would use to create a real concept set (below are parameters for testing functions)
-#HELLPsyndrome is a good one to test BUT change the conceptSetName and outputFolder first
-HELLPsyndrome <- list(condition = "HELLP syndrome", #important - this will determine what llm uses as the main condition
+#HELLPsyndrome is a good one to test BUT change the conceptSetTarget and outputFolder first
+HELLPsyndrome <- list(conceptSetTarget = "HELLP syndrome", #important - this will determine what llm uses as the main condition
                       excludedConcepts = "none", #text list of conditions that should be excluded
                       belowMinimumCountApproach = "EXCLUDE ALL", #how to test/not test concepts below minimum counts - important for cancers
                       #choose: "TEST ALL" to test all the concepts below the minimum count
@@ -53,7 +58,7 @@ HELLPsyndrome <- list(condition = "HELLP syndrome", #important - this will deter
                       minCount = 0, #the threshold for testing (see above)
                       outputFolder = "p:/shared/llm/HELLP syndrome", #where you want the final artifacts to be saved
                       clinicalContext = "patients in general population", #if you want a concept set specific to a prior condition, add it here
-                      additionalInformation = "", #added information for the prompt
+                      clinicalDefinition = "", #added information for the prompt
                       tries = 1, #the number of times you want llm to go through the list if you are concerned about consistency
                       successes = 1) #the number of successes (Ubiquitous) responses that must be achieved to include concept
 
@@ -63,7 +68,7 @@ conditionList <- list(HELLPsyndrome) #can put multiple concept set specs in this
 ################################################################################################
 for(conditionUp in 1:length(conditionList)) {
   #produces clinical description
-  clinicalDescription <- Phenelope::createClinicalDescription(condition= conditionList[[conditionUp]]$condition,
+  clinicalDescription <- Phenelope::createClinicalDescription(condition = conditionList[[conditionUp]]$conceptSetTarget,
                                                               excludedConcepts = conditionList[[conditionUp]]$excludedConcepts,
                                                               llmClient = llmClient,
                                                               outputToWord = TRUE,
@@ -71,7 +76,7 @@ for(conditionUp in 1:length(conditionList)) {
                                                                                    "clinical description.docx"))
 
   #create concept set
-  finalSet <- Phenelope::createConceptSet(conceptName = conditionList[[conditionUp]]$condition,
+  finalSet <- Phenelope::createConceptSet(conceptSetTarget = conditionList[[conditionUp]]$conceptSetTarget,
                                           excludedConcepts = conditionList[[conditionUp]]$excludedConcepts,
                                           tries = conditionList[[conditionUp]]$tries,
                                           successes = conditionList[[conditionUp]]$successes,
@@ -82,7 +87,7 @@ for(conditionUp in 1:length(conditionList)) {
                                           minCount = conditionList[[conditionUp]]$minCount,
                                           belowMinimumCountApproach = conditionList[[conditionUp]]$belowMinimumCountApproach,
                                           clinicalContext = conditionList[[conditionUp]]$clinicalContext,
-                                          additionalInformation = conditionList[[conditionUp]]$additionalInformation,
+                                          clinicalDefinition = conditionList[[conditionUp]]$clinicalDefinition,
                                           outputDirectory = conditionList[[conditionUp]]$outputFolder,
                                           quickRun = F,
                                           condenseConceptSet = T,
@@ -91,11 +96,11 @@ for(conditionUp in 1:length(conditionList)) {
   #after job extras
   if(!is.null(finalSet)) {
     #view the results
-    (View(finalSet[[1]], paste0(conditionList[[conditionUp]]$condition, " Results")))
+    (View(finalSet[[1]], paste0(conditionList[[conditionUp]]$conceptSetTarget, " Results")))
 
     #post to ATLAS
     ROhdsiWebApi::authorizeWebApi(baseUrl, "windows") # Windows
-    conceptSetName <- paste(conceptSetNamePrefix, conditionList[[conditionUp]]$condition)
+    conceptSetName <- paste(conceptSetNamePrefix, conditionList[[conditionUp]]$conceptSetTarget)
     post <- ROhdsiWebApi::postConceptSetDefinition(name = conceptSetName,
                                                    conceptSetDefinition = finalSet[[2]], baseUrl)
   }
@@ -104,10 +109,10 @@ for(conditionUp in 1:length(conditionList)) {
 ################################################################################################
 #create clinical description stand-alone (the full process above will automatically produce a clinical
 #description along with the concept set)
-clinicalDescription <- Phenelope::createClinicalDescription(condition= "agitation in Alzheimer's disease",
-                                                            excludedConcepts = "none",
-                                                            wordFileName = "p:/shared/llm/agitation in Alzheimer's disease/clinicalDescription.docx",
-                                                            llmClient = llmClient,
+clinicalDescription <- Phenelope::createClinicalDescription(condition= "Acute liver failure",
+                                                            excludedConditions = "none",
+                                                            wordFileName = "p:/shared/llm/Acute liver failure/clinicalDescription.docx",
+                                                            llmClient = llmClientReasoning,
                                                             outputToWord = TRUE)
 
 
