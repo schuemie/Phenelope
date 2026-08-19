@@ -161,7 +161,16 @@
 
   message("\n--Current number of concepts: ", nrow(concepts))
 
-  if (type == "phoebe" & nrow(concepts) > 500) { #on first pass through for large sets
+  previousRun <- data.frame()
+  if (!is.null(previousResults)) {
+    previousRun <- previousResults |>
+      dplyr::filter(.data$conceptId %in% concepts$conceptId)
+    concepts <- concepts |>
+      dplyr::filter(!.data$conceptId %in% previousResults$conceptId)
+    message("--skipping previously analyzed concepts yields: ", nrow(concepts))
+  }
+
+  if (nrow(concepts) > 500) { #for large sets
     #remove the clearly "no" concepts
     message("\n--Removing concepts that clearly do not belong...")
     updatedConcepts <- removeClearNo(query = query,
@@ -176,17 +185,8 @@
 
     # save to dataframe as a csv
     if(nrow(updatedConcepts) > 0) {
-      utils::write.csv(updatedConcepts, file.path(outputDirectory, paste0(conditionForFiles, "_removedConcepts.csv")), row.names = F)
+      utils::write.csv(updatedConcepts, file.path(outputDirectory, paste0(conditionForFiles, "_removedConcepts_", type, ".csv")), row.names = F)
     }
-  }
-
-  previousRun <- data.frame()
-  if (!is.null(previousResults)) {
-    previousRun <- previousResults |>
-      dplyr::filter(.data$conceptId %in% concepts$conceptId)
-    concepts <- concepts |>
-      dplyr::filter(!.data$conceptId %in% previousResults$conceptId)
-    message("--skipping previously analyzed concepts yields: ", nrow(concepts))
   }
 
   conceptsToUse <- concepts

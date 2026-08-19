@@ -809,7 +809,7 @@ getDrugClass <- function(drugName) {
         conceptList <- rbind(conceptList, seeds)
       }
     }
-
+    conceptList$conceptSetTarget <- conceptList$conceptName
     if(length(conceptList)) {
       utils::write.csv(conceptList, file.path(outputDirectory, paste0(searchString, "_from_embVectors.csv")), row.names = F)
     }
@@ -836,7 +836,7 @@ getDrugClass <- function(drugName) {
     if(length(conceptList) > 0) {
       llmConceptSet <- .createRecommendListFromConcepts(query = searchString,
                                                         conceptList = conceptList$conceptId,
-                                                        llmClient = llmClientNonReasoning,
+                                                        llmClient = llmClientReasoning,
                                                         prompt = promptToUse,
                                                         connectionDetails = connectionDetails,
                                                         connection = connection3,

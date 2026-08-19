@@ -5,7 +5,7 @@
 \title{Create concept set by calling the LLM}
 \usage{
 createConceptSet(
-  conceptName,
+  conceptSetTarget,
   originalConceptList = c(),
   excludedConcepts = "none",
   llmClientReasoning,
@@ -18,17 +18,17 @@ createConceptSet(
   outputDirectory,
   tries = 1,
   successes = 1,
-  additionalInformation = "",
+  clinicalDefinition = "",
   excludedVocabularies = c("ICDO3"),
   condenseConceptSet = TRUE,
   clinicalContext = "any clinical context",
-  bucketSize = 1,
+  bucketSize = 20,
   standardOnly = TRUE,
   quickRun = FALSE
 )
 }
 \arguments{
-\item{conceptName}{Character. Name of the concept pointing to the clinical condition.}
+\item{conceptSetTarget}{Character. Name of the concept pointing to the clinical condition.}
 
 \item{originalConceptList}{Integer or character vector. List of concept ids to use as a starting point.}
 
@@ -66,7 +66,7 @@ consensus vote from multiple LLM iterations.}
 \item{successes}{Integer. How many successes required to include a concept. The package allows for multiple runs of the same concept to
 get a consensus vote from multiple LLM iterations.}
 
-\item{additionalInformation}{Character. Additional information for concept development.  This may include any specific details that
+\item{clinicalDefinition}{Character. Clinical definition for concept setdevelopment.  This may include any specific details that
 are desired for the concepts, for example, "only in women"}
 
 \item{excludedVocabularies}{Vocabularies not to be included in the condensing function}
