@@ -39,5 +39,5 @@ Return ONLY valid JSON:
 
 {
   "mainConcept": "<MAIN_CONCEPT>",
-  "synonymousBucketNames": "<Produce an alphabetized, semi-colon-separated list of synonymous Bucket Names that ALWAYS includes the maon concept>"
+  "synonymousBucketNames": "<Produce an alphabetized, semi-colon-separated list of synonymous Bucket Names that ALWAYS includes the main concept>"
 }

@@ -521,7 +521,7 @@ WHERE concept_id IN (@concept_ids)
                           standardOnly,
                           bucketSize) {
 
-  hecateSearchString <- searchString #getClinicalSynonyms(searchString)$synonymousBucketNames
+  hecateSearchString <- getClinicalSynonyms(searchString)$synonymousBucketNames
 
   if (file.exists(file.path(outputDirectory, paste0(conditionForFiles,
                                                     "_from_embVectors.csv")))) {
@@ -533,6 +533,8 @@ WHERE concept_id IN (@concept_ids)
       " exists...skipping to next part of process."))
     prelimLlmResults <- utils::read.csv(file.path(outputDirectory, paste0(conditionForFiles,
                                                                           "_from_embVectors.csv")))
+    conceptList <- as.numeric(c(prelimLlmResults$conceptId[prelimLlmResults$finalAnswer == "YES"]))
+
   } else {
     if(length(originalConceptList) != 0) { #use provided concept list
       conceptList <- originalConceptList
@@ -540,18 +542,27 @@ WHERE concept_id IN (@concept_ids)
     } else { #get concept list from hecate
       #get seed concepts from hecate
       message(paste0("Searching Hecate for the following: ", hecateSearchString))
-      if(standardOnly == TRUE) {
-        seeds <- .vectorSearchStandard(term = hecateSearchString,
-                                       domains = domains,
-                                       conceptClasses = classes,
-                                       limit = vectorSearchSize)
-      } else {
-        seeds <- .vectorSearch(term = hecateSearchString,
-                               domains = domains,
-                               # conceptClasses = classes,
-                               limit = vectorSearchSize)
-      }
-      conceptList <- seeds
+
+      seeds <- getHecateSearchList(hecateSearchString,
+                                      domains = domains,
+                                      conceptClasses = classes,
+                                      vectorSearchSize = vectorSearchSize,
+                                      standardOnly = standardOnly)
+
+      seeds <- seeds[!duplicated(seeds$conceptName), ]
+
+      # if(standardOnly == TRUE) {
+      #   seeds <- .vectorSearchStandard(term = hecateSearchString,
+      #                                  domains = domains,
+      #                                  conceptClasses = classes,
+      #                                  limit = vectorSearchSize)
+      # } else {
+      #   seeds <- .vectorSearch(term = hecateSearchString,
+      #                          domains = domains,
+      #                          # conceptClasses = classes,
+      #                          limit = vectorSearchSize)
+      # }
+      conceptList <- seeds[1:vectorSearchSize,]
 
       promptToUse <- system.file("prompts", "LLM_Prompt_for_PHOEBE_generic_sensitive.txt", package = "Phenelope")
       #quick first pass - adjudicate hecate list to screen out bad fits
@@ -1122,3 +1133,33 @@ getClinicalSynonyms <- function(concept) {
   return(results)
 }
 
+getHecateSearchList <- function(hecateSearchString,
+                                domains,
+                                conceptClasses,
+                                vectorSearchSize,
+                                standardOnly) {
+  #convert semi-colon separated search string into a vector
+  searchVector <- trimws(strsplit(hecateSearchString, ";")[[1]])
+
+  allSeeds <- NULL
+  for(searchUp in 1:length(searchVector)) {
+    if(standardOnly == TRUE) {
+      seeds <- .vectorSearchStandard(term = searchVector[[searchUp]],
+                                     domains = domains,
+                                     conceptClasses = conceptClasses,
+                                     limit = vectorSearchSize)
+    } else {
+      seeds <- .vectorSearch(term = searchVector[[searchUp]],
+                             domains = domains,
+                             # conceptClasses = classes,
+                             limit = vectorSearchSize)
+    }
+    seeds <- cbind(rn = seq_len(nrow(seeds)), seeds)
+
+    if(nrow(seeds) > 0){
+      allSeeds <- rbind(allSeeds, seeds)
+    }
+  }
+  allSeeds <- allSeeds[order(allSeeds$rn), ]
+  return(allSeeds)
+}
