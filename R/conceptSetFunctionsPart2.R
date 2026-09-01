@@ -501,6 +501,7 @@ WHERE concept_id IN (@concept_ids)
 }
 
 .grabConcepts <- function(searchString,
+                          originalConceptList = originalConceptList,
                           llmClient,
                           domains,
                           classes,
@@ -520,7 +521,7 @@ WHERE concept_id IN (@concept_ids)
                           standardOnly,
                           bucketSize) {
 
-  hecateSearchString <- getClinicalSynonyms(searchString)$synonymousBucketNames
+  hecateSearchString <- searchString #getClinicalSynonyms(searchString)$synonymousBucketNames
 
   if (file.exists(file.path(outputDirectory, paste0(conditionForFiles,
                                                     "_from_embVectors.csv")))) {
@@ -533,45 +534,52 @@ WHERE concept_id IN (@concept_ids)
     prelimLlmResults <- utils::read.csv(file.path(outputDirectory, paste0(conditionForFiles,
                                                                           "_from_embVectors.csv")))
   } else {
-    #get seed concepts from hecate
-    message(paste0("Searching Hecate for the following: ", hecateSearchString))
-    if(standardOnly == TRUE) {
-      seeds <- .vectorSearchStandard(term = hecateSearchString,
-                                     domains = domains,
-                                     conceptClasses = classes,
-                                     limit = vectorSearchSize)
-    } else {
-      seeds <- .vectorSearch(term = hecateSearchString,
-                             domains = domains,
-                             # conceptClasses = classes,
-                             limit = vectorSearchSize)
-    }
-    conceptList <- seeds
+    if(length(originalConceptList) != 0) { #use provided concept list
+      conceptList <- originalConceptList
 
-    promptToUse <- system.file("prompts", "LLM_Prompt_for_PHOEBE_generic_sensitive.txt", package = "Phenelope")
-    #quick first pass - adjudicate hecate list to screen out bad fits
-    message("\nTesting initial list for viable concept candidates...")
-    prelimLlmResults <- .createRecommendListFromConcepts(query = searchString,
-                                                         conceptList = conceptList$conceptId,
-                                                         llmClient = llmClient,
-                                                         prompt = promptToUse,
-                                                         connectionDetails = connectionDetails,
-                                                         connection = connection,
-                                                         cdmDatabaseSchema = cdmDatabaseSchema,
-                                                         excludedConcepts = "none",
-                                                         clinicalDefinition = clinicalDefinition,
-                                                         clinicalContext = clinicalContext,
-                                                         conditionForFiles = conditionForFiles,
-                                                         bucketSize = bucketSize)
+    } else { #get concept list from hecate
+      #get seed concepts from hecate
+      message(paste0("Searching Hecate for the following: ", hecateSearchString))
+      if(standardOnly == TRUE) {
+        seeds <- .vectorSearchStandard(term = hecateSearchString,
+                                       domains = domains,
+                                       conceptClasses = classes,
+                                       limit = vectorSearchSize)
+      } else {
+        seeds <- .vectorSearch(term = hecateSearchString,
+                               domains = domains,
+                               # conceptClasses = classes,
+                               limit = vectorSearchSize)
+      }
+      conceptList <- seeds
 
-    if(!is.null(prelimLlmResults)) {
-      utils::write.csv(prelimLlmResults, file.path(outputDirectory, paste0(conditionForFiles,
-                                                                           "_from_embVectors.csv")), row.names = F)
+      promptToUse <- system.file("prompts", "LLM_Prompt_for_PHOEBE_generic_sensitive.txt", package = "Phenelope")
+      #quick first pass - adjudicate hecate list to screen out bad fits
+      message("\nTesting initial list for viable concept candidates...")
+      prelimLlmResults <- .createRecommendListFromConcepts(query = searchString,
+                                                           conceptList = conceptList$conceptId,
+                                                           llmClient = llmClient,
+                                                           prompt = promptToUse,
+                                                           connectionDetails = connectionDetails,
+                                                           connection = connection,
+                                                           cdmDatabaseSchema = cdmDatabaseSchema,
+                                                           excludedConcepts = "none",
+                                                           clinicalDefinition = clinicalDefinition,
+                                                           clinicalContext = clinicalContext,
+                                                           conditionForFiles = conditionForFiles,
+                                                           bucketSize = bucketSize)
+
+      if(!is.null(prelimLlmResults)) {
+        utils::write.csv(prelimLlmResults, file.path(outputDirectory, paste0(conditionForFiles,
+                                                                             "_from_embVectors.csv")), row.names = F)
+      }
+      conceptList <- as.numeric(c(prelimLlmResults$conceptId[prelimLlmResults$finalAnswer == "YES"]))
     }
   }
+
   #create full concept set using Phenelope (includes Phoebe and descendants)
   message("\nTesting viable concept candidates, their descendants, and PHOEBE recommendations...")
-  conceptList <- as.numeric(c(prelimLlmResults$conceptId[prelimLlmResults$finalAnswer == "YES"]))
+
   if(length(conceptList) > 0) {
     llmResults <- .getFullConceptSet(conceptSetTarget = searchString,
                                      conceptIds = conceptList,
@@ -691,6 +699,7 @@ getDrugClass <- function(drugName) {
 }
 
 .getDrugConceptSet <- function(searchString,
+                               originalConceptList = originalConceptList,
                                llmClientReasoning,
                                llmClientNonReasoning,
                                connectionDetails,
@@ -1106,9 +1115,9 @@ getClinicalSynonyms <- function(concept) {
     synonymousBucketNames = ellmer::type_string())
 
   results <- queryLLM(llmClient = llmClient,
-                             prompt,
-                             systemPrompt = systemPrompt,
-                             ellmerTypeObject = ellmerTypeObject)
+                      prompt,
+                      systemPrompt = systemPrompt,
+                      ellmerTypeObject = ellmerTypeObject)
 
   return(results)
 }

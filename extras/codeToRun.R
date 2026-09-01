@@ -77,6 +77,7 @@ for(conditionUp in 1:length(conditionList)) {
 
   #create concept set
   finalSet <- Phenelope::createConceptSet(conceptSetTarget = conditionList[[conditionUp]]$conceptSetTarget,
+                                          originalConceptList = c(),
                                           excludedConcepts = conditionList[[conditionUp]]$excludedConcepts,
                                           tries = conditionList[[conditionUp]]$tries,
                                           successes = conditionList[[conditionUp]]$successes,

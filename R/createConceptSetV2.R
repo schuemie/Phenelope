@@ -236,6 +236,7 @@ createConceptSet <- function(conceptSetTarget,
 
       if(domainToUse %in% c("DRUG")) { #concept set for drugs
         llmResults <- .getDrugConceptSet(searchString = searchString,
+                                         originalConceptList = originalConceptList,
                                          connectionDetails = connectionDetails,
                                          cdmDatabaseSchema = cdmDatabaseSchema,
                                          llmClientReasoning,
@@ -248,6 +249,7 @@ createConceptSet <- function(conceptSetTarget,
       } else { #concept set for all others
         #create the concept sets for the item
         llmResults <- .grabConcepts(searchString = searchString,
+                                    originalConceptList = originalConceptList,
                                     llmClient = llmClient,
                                     domains = domains,
                                     classes = NULL, #classes,
