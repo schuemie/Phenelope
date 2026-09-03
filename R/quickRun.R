@@ -45,7 +45,6 @@
   noTestList <- NULL
 
   cost <- 0
-  llmClient$set_turns(list()) # Reset the chat
 
   concepts$conceptSetTarget <- gsub("\\[|\\]", " ", concepts$conceptName) #remove any [ or ] from name (interferes with json structure)
   if (nrow(concepts) != 0) {
@@ -88,10 +87,10 @@
             fullBucket <- FALSE
             bucketAttempt <- 0
             while(!fullBucket) {
-              llmClient$set_turns(list()) # Reset the chat
               bucketAttempt <- bucketAttempt + 1
               bucketItems <- (endPoint - startPoint) + 1
               saveLastPrompt(prompt)
+              llmClient$set_turns(list()) # Reset the chat
               text <- llmClient$chat_structured(prompt,
                                                 echo = "none",
                                                 type = ellmer::type_array(ellmer::type_object(
@@ -138,7 +137,6 @@
 
             success <- TRUE
             cost <- cost + llmClient$get_cost()
-            llmClient$set_turns(list()) # Reset the chat
           },
           error = function(e) {
             # Handle the error: print a message and increment the attempt counter

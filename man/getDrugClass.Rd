@@ -4,10 +4,12 @@
 \alias{getDrugClass}
 \title{Provide the class of a drug object from a string appropriate for building a concept set}
 \usage{
-getDrugClass(drugName)
+getDrugClass(drugName, llmClient)
 }
 \arguments{
 \item{drugName}{a string that represents the drug of interest}
+
+\item{llmClient}{connection object for the LLM client (see ellmer package for object details)}
 }
 \value{
 a dataframe with various elements including the vocabulary class for the drug associated with the given string

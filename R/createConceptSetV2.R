@@ -244,7 +244,8 @@ createConceptSet <- function(conceptSetTarget,
                                          clinicalDefinition = clinicalDefinition,
                                          outputDirectory = outputDirectory,
                                          clinicalContext = clinicalContext,
-                                         bucketSize = bucketSize)
+                                         bucketSize = bucketSize,
+                                         conditionForFiles = conditionForFiles)
 
       } else { #concept set for all others
         #create the concept sets for the item

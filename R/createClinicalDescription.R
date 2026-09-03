@@ -59,6 +59,8 @@ createClinicalDescription <- function(condition,
 
   prompt <- paste(openPrompt, getPrompt)
 
+  llmClient$set_system_prompt("")
+  llmClient$set_turns(list())
   response <- llmClient$chat(prompt, echo = "none")
 
   # LLM output

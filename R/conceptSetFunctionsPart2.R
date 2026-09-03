@@ -52,7 +52,7 @@
       closestConditionConcept = conceptSetTarget,
       conceptList = originalConceptList,
       llmClient = llmClient,
-      connection = connection,
+      connection = connection3,
       connectionDetails = connectionDetails,
       cdmDatabaseSchema = cdmDatabaseSchema,
       type = "phoebe",
@@ -104,7 +104,7 @@
     closestConditionConcept = conceptSetTarget,
     conceptList = conceptList,
     llmClient = llmClient,
-    connection = connection,
+    connection = connection3,
     connectionDetails = connectionDetails,
     cdmDatabaseSchema = cdmDatabaseSchema,
     type = "included",
@@ -521,7 +521,7 @@ WHERE concept_id IN (@concept_ids)
                           standardOnly,
                           bucketSize) {
 
-  hecateSearchString <- getClinicalSynonyms(searchString)$synonymousBucketNames
+  hecateSearchString <- getClinicalSynonyms(searchString, llmClient)$synonymousBucketNames
 
   if (file.exists(file.path(outputDirectory, paste0(conditionForFiles,
                                                     "_from_embVectors.csv")))) {
@@ -625,9 +625,10 @@ WHERE concept_id IN (@concept_ids)
 #' Provide the class of a drug object from a string appropriate for building a concept set
 #'
 #' @param drugName    a string that represents the drug of interest
+#' @param llmClient connection object for the LLM client (see ellmer package for object details)
 #' @return a dataframe with various elements including the vocabulary class for the drug associated with the given string
 #' @export
-getDrugClass <- function(drugName) {
+getDrugClass <- function(drugName, llmClient) {
   ellmerTypeObject <- ellmer::type_array(ellmer::type_object(
     drugName = ellmer::type_string(),
     routeOfAdministrationYesNo = ellmer::type_enum(values = c("YES","NO")),
@@ -718,14 +719,15 @@ getDrugClass <- function(drugName) {
                                clinicalDefinition = "",
                                outputDirectory,
                                clinicalContext = "",
-                               bucketSize) {
+                               bucketSize,
+                               conditionForFiles) {
 
   connection3 <- suppressMessages(DatabaseConnector::connect(connectionDetails = connectionDetails))
   on.exit(DatabaseConnector::disconnect(connection3))
 
   #get drug class, e.g., ingredient, drug product, etc
   domains <- c("Drug")
-  drugClass <- getDrugClass(searchString)
+  drugClass <- getDrugClass(searchString, llmClientReasoning)
 
   if (file.exists(file.path(outputDirectory, paste0(searchString, "_from_LLM.csv")))) {
     # found the llm derived concepts, skip this part
@@ -1073,7 +1075,7 @@ removeClearNo <- function(query,
 
     prompt <- paste(updatedLines, collapse = "\n")
     lastPrompt <- prompt
-    Phenelope:::saveLastPrompt(prompt)
+    saveLastPrompt(prompt)
 
     systemPrompt <- "You are an expert medical doctor specializing in healthcare data analysis. Your primary function is to analyze healthcare data, including electronic health records, to infer causal relationships between exposures and health outcomes."
 
@@ -1090,7 +1092,6 @@ removeClearNo <- function(query,
                                systemPrompt = systemPrompt,
                                ellmerTypeObject = ellmerTypeObject)
 
-    llmClient$set_turns(list()) # Reset the chat
     startPoint <- endPoint + 1
     endPoint <- min(startPoint + bucketSize, nrow(conceptList))
 
@@ -1107,7 +1108,7 @@ removeClearNo <- function(query,
   return(results)
 }
 
-getClinicalSynonyms <- function(concept) {
+getClinicalSynonyms <- function(concept, llmClient) {
   promptUp <- system.file("prompts", "clinicalSynonyms.txt", package = "Phenelope")
   originalLines <- readLines(promptUp)
 
@@ -1115,11 +1116,9 @@ getClinicalSynonyms <- function(concept) {
 
   prompt <- paste(updatedLines, collapse = "\n")
   lastPrompt <- prompt
-  Phenelope:::saveLastPrompt(prompt)
+  saveLastPrompt(prompt)
 
   systemPrompt <- "You are an expert medical doctor specializing in healthcare data analysis. Your primary function is to analyze healthcare data, including electronic health records, to infer causal relationships between exposures and health outcomes."
-
-  llmClient$set_system_prompt(systemPrompt)
 
   ellmerTypeObject <- ellmer::type_object(
     mainConcept = ellmer::type_string(),

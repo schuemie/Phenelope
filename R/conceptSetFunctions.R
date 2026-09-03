@@ -258,7 +258,6 @@
   }
 
   cost <- 0
-  llmClient$set_turns(list()) # Reset the chat
 
   if (!is.null(testList)) {
     concepts <- testList
@@ -311,6 +310,7 @@
             while(!fullBucket) {
               bucketAttempt <- bucketAttempt + 1
               bucketItems <- (endPoint - startPoint) + 1
+              llmClient$set_turns(list()) # Reset the chat
               text <- llmClient$chat_structured(prompt,
                                                 echo = "none",
                                                 type = ellmer::type_array(ellmer::type_object(
@@ -359,7 +359,6 @@
 
             success <- TRUE
             cost <- cost + llmClient$get_cost()
-            llmClient$set_turns(list()) # Reset the chat
           },
           error = function(e) {
             # Handle the error: print a message and increment the attempt counter
@@ -552,8 +551,8 @@
       }
     } else {
       stop(sprintf(
-        "Error in phoebe search for concept %s: %s",
-        conceptUp,
+        "Error in phoebe search for concepts %s: %s",
+        paste(ids, collapse = ", "),
         httr::status_code(response)
       ))
     }
@@ -600,8 +599,10 @@ saveLastPrompt <- function(prompt) {
   return(domainName)
 }
 
-queryLLM <- function(llmClient, prompt, systemPrompt = NULL, silent = TRUE, output = "data frame", array = F, ellmerTypeObject = NULL) {
-  if(!silent) {ParallelLogger::logInfo("\n--Querying LLM...")}
+queryLLM <- function(llmClient, prompt, systemPrompt = "", silent = TRUE, output = "data frame", array = F, ellmerTypeObject = NULL) {
+  if(!silent) {message("\n--Querying LLM...")}
+
+  llmClient$set_system_prompt(systemPrompt)
 
   retry_limit <- 10  # Maximum number of retries
   attempt <- 0      # Initial attempt counter
@@ -613,11 +614,13 @@ queryLLM <- function(llmClient, prompt, systemPrompt = NULL, silent = TRUE, outp
       saveLastPrompt(prompt)
 
       if(output == "text") { #simple text return
+        llmClient$set_turns(list())
         text <- llmClient$chat(prompt,
                                echo = "none")
 
         results <- text
       } else { #json return
+        llmClient$set_turns(list())
         text <- llmClient$chat_structured(prompt,
                                           echo = "none",
                                           type = ellmerTypeObject
