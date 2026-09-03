@@ -118,8 +118,8 @@ createConceptSet <- function(conceptSetTarget,
 
   # log params, explicitly exclude connectionDetails if you want (extra safety)
   logCallParams(output_dir = outputDirectory,
-                  exclude = c("connectionDetails"),
-                  filename_prefix = "createConceptSet")
+                exclude = c("connectionDetails"),
+                filename_prefix = "createConceptSet")
 
   DatabaseConnector::assertTempEmulationSchemaSet(
     dbms = connectionDetails$dbms,
@@ -143,7 +143,7 @@ createConceptSet <- function(conceptSetTarget,
   }
 
   #get domain to determine analysis
-  domainToUse <- .getDomain(llmClient = llmClient, searchString = conceptSetTarget)$domain[[1]]
+  domainToUse <- .getDomain(llmClient = llmClient, searchString = conceptSetTarget)$domain
 
   if(domainToUse %in% c("DRUG")) { #concept set for drugs
     condenseConceptSet <- FALSE #don't need to do this for drugs
@@ -167,7 +167,7 @@ createConceptSet <- function(conceptSetTarget,
       next
     }
 
-    searchString <- gsub(" codes", "", conceptSetTarget) #strip off the suffix
+    searchString <- gsub(" codes$", "", conceptSetTarget) #strip off the suffix
 
     if(quickRun == FALSE) {#need to go through the multi-stage process rather than a simple test
       #NOTE: currently not using classes - leaving them in as placeholder for future

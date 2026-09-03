@@ -30,7 +30,7 @@
                                                       clinicalContext,
                                                       excludedVocabularies = c("ICDO3"),
                                                       domain,
-                                                      phoebeExclusions = phoebeExclusions,
+                                                      phoebeExclusions,
                                                       bucketSize,
                                                       conditionForFiles,
                                                       outputDirectory) {
@@ -66,19 +66,16 @@
   conceptList <- DatabaseConnector::querySql(connection = connection2, sql = sql, snakeCaseToCamelCase = TRUE)
   conceptList$conceptSetTarget <- conceptList$conceptName
 
-  if(nrow(conceptList) == 0) {
+  if (nrow(conceptList) == 0) {
     message(paste0("\n...no concepts found for ", query))
     return(NULL)  # Return NULL in case of no concepts
   }
-
-  if (nrow(conceptList) != 0) {
-    conceptList$phoebe <- F
-  }
+  conceptList$phoebe <- F
 
   message("--Finding ", type, " results for concept set")
   if (type == "phoebe") {
     # recs <- .getPhoebeData(c(conceptList$conceptId))
-    recs <- .getAnyPhoebeData(c(conceptList$conceptId))
+    recs <- .getAnyPhoebeData(conceptList$conceptId)
 
     if(!is.null(recs)) {
       if(nrow(recs) != 0) {
@@ -97,7 +94,7 @@
         packageName = "Phenelope",
         dbms = connectionDetails$dbms,
         cdm_database_schema = cdmDatabaseSchema,
-        concept_list = paste(recsFinal$conceptId, collapse = ", "),
+        concept_list = recsFinal$conceptId,
         excludedVocabularies = paste(sprintf("'%s'", excludedVocabularies), collapse = ", ")
       )
 
@@ -139,7 +136,7 @@
     }
   } else { # else test against included concepts
     if(minCount > 0) { #need to get record count as it is used to determine eligible concepts
-      recs <- .getAnyPhoebeData(c(conceptList$conceptId)) # get phoebe data on this pass solely for the record counts
+      recs <- .getAnyPhoebeData(conceptList$conceptId) # get phoebe data on this pass solely for the record counts
     } else { #don't need to get record counts on this pass as it won't be used to determine eligible concepts
       recs <- data.frame() #set to empty df
     }
@@ -173,19 +170,19 @@
   if (nrow(concepts) > 500) { #for large sets
     #remove the clearly "no" concepts
     message("\n--Removing concepts that clearly do not belong...")
-    updatedConcepts <- removeClearNo(query = query,
-                                     conceptList = concepts,
-                                     llmClient = llmClient,
-                                     clinicalDefinition = clinicalDefinition,
-                                     clinicalContext = clinicalContext,
-                                     bucketSize = 200)
-
-    concepts <- concepts[!(concepts$conceptId %in% c(updatedConcepts$conceptId)),]
+    conceptsToRemove <- findClearNo(query = query,
+                                    conceptList = concepts,
+                                    llmClient = llmClient,
+                                    clinicalDefinition = clinicalDefinition,
+                                    clinicalContext = clinicalContext,
+                                    bucketSize = 200)
+    concepts <- concepts |>
+           filter(!.data$conceptId %in% conceptsToRemove$conceptId)
     message(paste0("--", nrow(concepts), " concepts remain to be fully tested.\n"))
 
     # save to dataframe as a csv
-    if(nrow(updatedConcepts) > 0) {
-      utils::write.csv(updatedConcepts, file.path(outputDirectory, paste0(conditionForFiles, "_removedConcepts_", type, ".csv")), row.names = F)
+    if(nrow(conceptsToRemove) > 0) {
+      utils::write.csv(conceptsToRemove, file.path(outputDirectory, paste0(conditionForFiles, "_removedConcepts_", type, ".csv")), row.names = F)
     }
   }
 
@@ -200,13 +197,18 @@
   results <- data.frame()
 
   # read in the basic prompt
+  # systemPromptFile <- "inst/prompts/LLM_Prompt_for_PHOEBE_generic.txt"
+  systemPromptFile <- system.file("prompts", "LLM_Prompt_for_PHOEBE_generic.txt", package = "Phenelope")
+  systemPrompt <- paste(readLines(systemPromptFile), collapse = "\n")
 
-  if(bucketSize > 1) {
-    promptUp <- system.file("prompts", "LLM_Prompt_for_PHOEBE_generic.txt", package = "Phenelope")
-  } else {
-    promptUp <- system.file("prompts", "LLM_Prompt_for_PHOEBE_single_generic.txt", package = "Phenelope")
-  }
-  originalLines <- readLines(promptUp)
+  outputType <- ellmer::type_array(
+    ellmer::type_object(
+      conceptId = ellmer::type_integer(),
+      conceptName = ellmer::type_string(),
+      decision = ellmer::type_enum(c("KEEP", "REMOVE")),
+      rationale = ellmer::type_string()
+    )
+  )
 
   #test which in the concept list need to be tested
   testList <- NULL
@@ -267,136 +269,32 @@
   if (nrow(concepts) != 0) {
     startPoint <- 1
     endPoint <- min(bucketSize, nrow(concepts))
+    reviewedConcepts <- list()
     while(startPoint <= nrow(concepts)) {
       cat(paste0("--Querying LLM - Analyzing concepts ", startPoint, " through ", endPoint, " of ", nrow(concepts), "  \r"))
-      concepts$aboveMin[1] <- T # always test the first concept
 
-      testCondition <- concepts[startPoint:endPoint, c("conceptId", "conceptSetTarget")]
-      baseCondition <- query
-
-      updatedLines <- gsub("MAIN_CONCEPT", baseCondition, originalLines)
-
-      if(bucketSize == 1) {
-        testConditionShort <- concepts[startPoint:endPoint, c("conceptSetTarget")]
-        updatedLines <- gsub("SUGGESTED_CONCEPT_SHORT", testConditionShort, updatedLines)
+      candidates <- concepts[startPoint:endPoint, c("conceptId", "conceptSetTarget")]
+      prompt <- paste("Target Term:", query)
+      if (!is.null(clinicalDefinition) && clinicalDefinition != "") {
+        prompt <- c(prompt, "", paste("Clinical definition:", clinicalDefinition))
       }
+      json <- candidates |>
+        select("conceptId", conceptName = "conceptSetTarget") |>
+        jsonlite::toJSON(pretty = TRUE)
+      prompt <- c(prompt, "", paste("Candidate Concepts:", json))
+      prompt <- paste(prompt, collapse = "\n")
 
-      json_all <- jsonlite::toJSON(testCondition)
-      updatedLines <- gsub("SUGGESTED_CONCEPT", json_all, updatedLines)
-
-      updatedLines <- gsub("EXCLUDED_CONCEPTS", excludedConcepts, updatedLines)
-      updatedLines <- gsub("CLINICAL_CONTEXT", clinicalContext, updatedLines)
-      updatedLines <- gsub("ADDITIONAL_INFORMATION", clinicalDefinition, updatedLines)
-
-      prompt <- paste(updatedLines, collapse = "\n")
-      lastPrompt <- prompt
-      saveLastPrompt(prompt)
-
-      retryLimit <- 10 # Maximum number of retries
-      attempt <- 0 # Initial attempt counter
-      success <- FALSE # Flag to indicate success
-
-      while (attempt <= retryLimit && !success) { # llm will mislabel column headers occasionally - usually fixed with a re-try
-        tryCatch(
-          {
-            attempt <- attempt + 1 # Increment the attempt count
-
-            systemPrompt <- "You are an expert medical doctor specializing in healthcare data analysis. Your primary function is to analyze healthcare data, including electronic health records, to infer causal relationships between exposures and health outcomes."
-
-            llmClient$set_system_prompt(systemPrompt)
-
-            fullBucket <- FALSE
-            bucketAttempt <- 0
-            while(!fullBucket) {
-              bucketAttempt <- bucketAttempt + 1
-              bucketItems <- (endPoint - startPoint) + 1
-              llmClient$set_turns(list()) # Reset the chat
-              text <- llmClient$chat_structured(prompt,
-                                                echo = "none",
-                                                type = ellmer::type_array(ellmer::type_object(
-                                                  conceptId = ellmer::type_string(),
-                                                  suggestedConcept = ellmer::type_string(),
-                                                  excludedConcepts = ellmer::type_string(),
-                                                  proposedInExcluded = ellmer::type_string(),
-                                                  finalAnswer = ellmer::type_enum(values = c("YES","NO")),
-                                                  rationaleForAnswer = ellmer::type_string(),
-                                                  confidenceLevel = ellmer::type_enum(values = c("CLEAR","BORDERLINE"))
-                                                ))
-              )
-
-              if (is.character(text)) {
-                if (jsonlite::validate(text)) {
-                  text <- jsonlite::fromJSON(text)
-                }
-              }
-
-              resultsDf <- data.frame(text)
-              if(nrow(resultsDf) == bucketItems) { #same rows sent out as received
-                fullBucket <- TRUE
-                bucketAttempt <- 0
-              } else {
-                cat(paste0("---Querying LLM - Analyzing concepts ", startPoint, " through ", endPoint, " of ", nrow(concepts), "\r"))
-
-                if(bucketAttempt == 10) {
-                  stop("LLM connection issue...stopping")
-                  saveLastPrompt(prompt)
-                }
-              }
-            }
-            resultsDf$tested <- T
-
-            resultsDf$mainCondition <- baseCondition
-            resultsDf$model <- llmClient$get_model()
-            resultsDf$cost <- sprintf("%.5f", llmClient$get_cost())
-
-            columnsToFront <- c("suggestedConcept", "conceptId", "mainCondition", "finalAnswer", "rationaleForAnswer", "confidenceLevel")
-
-            # Rearrange the DataFrame
-            resultsDf <- resultsDf |>
-              dplyr::select(all_of(columnsToFront), everything())
-
-            results <- rbind(results, resultsDf)
-
-            success <- TRUE
-            cost <- cost + llmClient$get_cost()
-          },
-          error = function(e) {
-            # Handle the error: print a message and increment the attempt counter
-            message(paste("Attempt", attempt, "failed:", e$message))
-
-            message(paste0("Failure on: ***", testCondition, "***"))
-            if (grepl("abort", e$message, ignore.case = TRUE)) {
-              cat("Stopping the run as requested.\n")
-              stop("Execution stopped by user.")
-            }
-            if (attempt >= retryLimit) {
-              message(paste("Reached attempt limit."))
-              userInput <- readline(prompt = "Do you want to continue with the next concept? y/n ")
-              if (userInput == tolower("n")) {
-                cat("Stopping the run as requested.\n")
-                stop("Execution stopped by user.")
-              }
-            }
-            return(NULL) # Return NULL in case of error
-          }
-        )
-      }
-
-      if (!success) {
-        message("All attempts failed for test condition ", testCondition, ". Skipping to next test condition.")
-        return(NULL) # Skip to the next iteration of the outer loop
-      }
+      reviewedConcepts[[length(reviewedConcepts) + 1]] <- queryLLM(llmClient = llmClient,
+                                                                   systemPrompt = systemPrompt,
+                                                                   prompt = prompt,
+                                                                   ellmerTypeObject = outputType)
 
       startPoint <- endPoint + 1
       endPoint <- min(endPoint + bucketSize, nrow(concepts))
     }
-
+    reviewedConcepts <- bind_rows(reviewedConcepts)
     message("\n\n--Total cost was $", sprintf("%.3f", cost))
 
-    fullResults <- results
-    if(length(noTestList)) { #add in the untested if any
-      fullResults <- rbind(fullResults, noTestList)
-    }
 
     if (type == "phoebe") { # only join this for phoebe results
       if (nrow(recsFinal) != 0) {
@@ -582,17 +480,16 @@ saveLastPrompt <- function(prompt) {
 
 .getDomain <- function(llmClient, searchString) {
 
-  ellmerTypeObject <- ellmer::type_array(ellmer::type_object(
-    term = ellmer::type_string(),
-    domain = ellmer::type_enum(values = c("DRUG","CONDITION","PROCEDURE","VISIT","DEVICE", "MEASUREMENT"))
-  ))
+  ellmerTypeObject <- ellmer::type_object(
+      domain = ellmer::type_enum(values = c("DRUG","CONDITION","PROCEDURE","VISIT","DEVICE", "MEASUREMENT"))
+  )
 
-  prompt <- paste0("Determine what domain category, DRUG, CONDITION, PROCEDURE, MEASUREMENT, VISIT, or DEVICE, the following belongs to: ",
+  prompt <- paste0("Determine what domain category, DRUG, CONDITION, PROCEDURE, MEASUREMENT, VISIT, or DEVICE, the following term belongs to: ",
                    searchString,
-                   "  [{
-                            \"term\": \"Name of the search term\",
-                            \"domain\": \"Domain name\"
-                            }]")
+                   "\n\nOutput JSON only, using the following format:\n",
+                    "{\n",
+                    "  \"domain\": \"Domain name\"\n",
+                    "}\n")
 
   domainName <- queryLLM(llmClient = llmClient, prompt = prompt, ellmerTypeObject = ellmerTypeObject)
 

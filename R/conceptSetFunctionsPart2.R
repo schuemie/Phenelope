@@ -140,19 +140,11 @@
                                excludedVocabularies = c("ICDO3"),
                                excludedConcepts,
                                clinicalContext =  "",
-                               outputDirectory = outputDirectory,
+                               outputDirectory,
                                tryNumber,
                                conditionForFiles,
                                phoebeExclusions = c(),
                                bucketSize = 20) {
-  if(!is.null(getOption("databaseConnectorInteger64AsNumeric"))) {
-    if(!getOption("databaseConnectorInteger64AsNumeric")) { #if set to false, change to true and put back at the end
-      options(databaseConnectorInteger64AsNumeric = TRUE)
-      on.exit(options(databaseConnectorInteger64AsNumeric = FALSE))
-    }
-  }
-
-
   connection4 <- suppressMessages(DatabaseConnector::connect(connectionDetails = connectionDetails))
   on.exit(DatabaseConnector::disconnect(connection4))
 
@@ -167,7 +159,7 @@
                 # "and c.concept_class_id in (", paste0("'", conceptClasses, "'", collapse = "," ), ") ",
                 "and c.standard_concept = \"S\";")
 
-  recordCount <- DatabaseConnector:: querySql(connection = connection4, sql, snakeCaseToCamelCase = TRUE)
+  recordCount <- DatabaseConnector:: querySql(connection = connection4, sql, snakeCaseToCamelCase = TRUE)[1, 1]
 
   if(recordCount <= 5000) { # reasonable size concept set to test
     #test to see if any concepts should be explicitly excluded
@@ -501,7 +493,7 @@ WHERE concept_id IN (@concept_ids)
 }
 
 .grabConcepts <- function(searchString,
-                          originalConceptList = originalConceptList,
+                          originalConceptList,
                           llmClient,
                           domains,
                           classes,
@@ -521,8 +513,6 @@ WHERE concept_id IN (@concept_ids)
                           standardOnly,
                           bucketSize) {
 
-  hecateSearchString <- getClinicalSynonyms(searchString, llmClient)$synonymousBucketNames
-
   if (file.exists(file.path(outputDirectory, paste0(conditionForFiles,
                                                     "_from_embVectors.csv")))) {
     # skip finding seeds if already exists
@@ -540,51 +530,82 @@ WHERE concept_id IN (@concept_ids)
       conceptList <- originalConceptList
 
     } else { #get concept list from hecate
-      #get seed concepts from hecate
-      message(paste0("Searching Hecate for the following: ", hecateSearchString))
-
-      seeds <- getHecateSearchList(hecateSearchString,
-                                      domains = domains,
-                                      conceptClasses = classes,
-                                      vectorSearchSize = vectorSearchSize,
-                                      standardOnly = standardOnly)
-
-      seeds <- seeds[!duplicated(seeds$conceptName), ]
-
-      # if(standardOnly == TRUE) {
-      #   seeds <- .vectorSearchStandard(term = hecateSearchString,
-      #                                  domains = domains,
-      #                                  conceptClasses = classes,
-      #                                  limit = vectorSearchSize)
-      # } else {
-      #   seeds <- .vectorSearch(term = hecateSearchString,
-      #                          domains = domains,
-      #                          # conceptClasses = classes,
-      #                          limit = vectorSearchSize)
-      # }
-      conceptList <- seeds[1:vectorSearchSize,]
-
-      promptToUse <- system.file("prompts", "LLM_Prompt_for_PHOEBE_generic_sensitive.txt", package = "Phenelope")
-      #quick first pass - adjudicate hecate list to screen out bad fits
-      message("\nTesting initial list for viable concept candidates...")
-      prelimLlmResults <- .createRecommendListFromConcepts(query = searchString,
-                                                           conceptList = conceptList$conceptId,
-                                                           llmClient = llmClient,
-                                                           prompt = promptToUse,
-                                                           connectionDetails = connectionDetails,
-                                                           connection = connection,
-                                                           cdmDatabaseSchema = cdmDatabaseSchema,
-                                                           excludedConcepts = "none",
-                                                           clinicalDefinition = clinicalDefinition,
-                                                           clinicalContext = clinicalContext,
-                                                           conditionForFiles = conditionForFiles,
-                                                           bucketSize = bucketSize)
-
-      if(!is.null(prelimLlmResults)) {
-        utils::write.csv(prelimLlmResults, file.path(outputDirectory, paste0(conditionForFiles,
-                                                                             "_from_embVectors.csv")), row.names = F)
+      candidates <- .vectorSearchStandard(term = searchString,
+                                     domains = domains,
+                                     conceptClasses = classes,
+                                     limit = vectorSearchSize)
+      systemPrompt <- paste0("You are a medical terminology expert. You are given a term and possibly a clinical ",
+                             "definition of that term, as well as a set of candidate target concepts.\n",
+                             "Your task it to return the target concept that best matches the input term (and ",
+                             "definition). If there are multiple valid candidates, prefer the one with the highest ",
+                             "record count.\n\n",
+                             "Output only valid JSON, following this format:\n",
+                             "{\n",
+                             "  \"conceptId\": <concept ID of the best match>\n",
+                             "}\n")
+      prompt <- paste("Term:", searchString)
+      if (!is.null(clinicalDefinition) && clinicalDefinition != "") {
+        prompt <- c(prompt, "", paste("Clinical definition:", clinicalDefinition))
       }
-      conceptList <- as.numeric(c(prelimLlmResults$conceptId[prelimLlmResults$finalAnswer == "YES"]))
+      json <- candidates |>
+        select("conceptId", "conceptName", "recordCount") |>
+        jsonlite::toJSON(pretty = TRUE)
+      prompt <- c(prompt, "", paste("Candidate Target Concepts:", json))
+      prompt <- paste(prompt, collapse = "\n")
+
+      outputType <- ellmer::type_object(conceptId = ellmer::type_integer())
+      conceptList <- queryLLM(llmClient = llmClient,
+                              systemPrompt = systemPrompt,
+                              prompt = prompt,
+                              ellmerTypeObject = outputType)
+      conceptList <- conceptList$conceptId
+
+      # #get seed concepts from hecate
+      # synonyms <- getClinicalSynonyms(searchString, llmClient)
+      # message("Searching Hecate for the following: ", paste(synonyms, collapse = ", "))
+      #
+      # seeds <- getHecateSearchList(synonyms,
+      #                              domains = domains,
+      #                              conceptClasses = classes,
+      #                              vectorSearchSize = vectorSearchSize,
+      #                              standardOnly = standardOnly)
+      #
+      # seeds <- seeds[!duplicated(seeds$conceptName), ]
+      #
+      # # if(standardOnly == TRUE) {
+      # #   seeds <- .vectorSearchStandard(term = hecateSearchString,
+      # #                                  domains = domains,
+      # #                                  conceptClasses = classes,
+      # #                                  limit = vectorSearchSize)
+      # # } else {
+      # #   seeds <- .vectorSearch(term = hecateSearchString,
+      # #                          domains = domains,
+      # #                          # conceptClasses = classes,
+      # #                          limit = vectorSearchSize)
+      # # }
+      # conceptList <- seeds[1:vectorSearchSize,]
+      #
+      # promptToUse <- system.file("prompts", "LLM_Prompt_for_PHOEBE_generic_sensitive.txt", package = "Phenelope")
+      # #quick first pass - adjudicate hecate list to screen out bad fits
+      # message("\nTesting initial list for viable concept candidates...")
+      # prelimLlmResults <- .createRecommendListFromConcepts(query = searchString,
+      #                                                      conceptList = conceptList$conceptId,
+      #                                                      llmClient = llmClient,
+      #                                                      prompt = promptToUse,
+      #                                                      connectionDetails = connectionDetails,
+      #                                                      connection = connection,
+      #                                                      cdmDatabaseSchema = cdmDatabaseSchema,
+      #                                                      excludedConcepts = "none",
+      #                                                      clinicalDefinition = clinicalDefinition,
+      #                                                      clinicalContext = clinicalContext,
+      #                                                      conditionForFiles = conditionForFiles,
+      #                                                      bucketSize = bucketSize)
+      #
+      # if(!is.null(prelimLlmResults)) {
+      #   utils::write.csv(prelimLlmResults, file.path(outputDirectory, paste0(conditionForFiles,
+      #                                                                        "_from_embVectors.csv")), row.names = F)
+      # }
+      # conceptList <- as.numeric(c(prelimLlmResults$conceptId[prelimLlmResults$finalAnswer == "YES"]))
     }
   }
 
@@ -1046,69 +1067,59 @@ logCallParams <- function(output_dir,
   invisible(filename)
 }
 
-removeClearNo <- function(query,
+findClearNo <- function(query,
                           conceptList,
                           llmClient,
                           clinicalDefinition = "",
                           clinicalContext = "",
                           bucketSize = 200) {
 
-  promptUp <- system.file("prompts", "LLM_Prompt_for_PHOEBE_generic_clear_no.txt", package = "Phenelope")
-  originalLines <- readLines(promptUp)
+  # promptUp <- system.file("prompts", "LLM_Prompt_for_PHOEBE_generic_clear_no.txt", package = "Phenelope")
+  # originalLines <- readLines(promptUp)
 
-  results <- NULL
+  # systemPromptFile <- "inst/prompts/LLM_Prompt_for_PHOEBE_generic_clear_no.txt"
+  systemPromptFile <- system.file("prompts", "LLM_Prompt_for_PHOEBE_generic_clear_no.txt", package = "Phenelope")
+  systemPrompt <- paste(readLines(systemPromptFile), collapse = "\n")
+
+  outputType <- ellmer::type_array(
+    ellmer::type_object(
+      conceptId = ellmer::type_integer(),
+      conceptName = ellmer::type_string(),
+      rationale = ellmer::type_string()
+    )
+  )
+
   startPoint <- 1
   endPoint <- min(bucketSize, nrow(conceptList))
+  conceptsToRemove <- list()
   while(startPoint <= nrow(conceptList)) {
     cat(paste0("--Querying LLM for ", query, " - Analyzing concepts ", startPoint, " through ", endPoint, " of ", nrow(conceptList), "  \r"))
-    conceptList$aboveMin[1] <- T # always test the first concept
 
-    testCondition <- conceptList[startPoint:endPoint, c("conceptId", "conceptSetTarget")]
-    baseCondition <- query
+    candidates <- conceptList[startPoint:endPoint, c("conceptId", "conceptSetTarget")]
 
-    updatedLines <- gsub("MAIN_CONCEPT", baseCondition, originalLines)
+    prompt <- paste("Target Term:", query)
+    if (!is.null(clinicalDefinition) && clinicalDefinition != "") {
+      prompt <- c(prompt, "", paste("Clinical definition:", clinicalDefinition))
+    }
+    json <- candidates |>
+      select("conceptId", conceptName = "conceptSetTarget") |>
+      jsonlite::toJSON(pretty = TRUE)
+    prompt <- c(prompt, "", paste("Candidate Concepts:", json))
+    prompt <- paste(prompt, collapse = "\n")
 
-    json_all <- jsonlite::toJSON(testCondition)
-    updatedLines <- gsub("SUGGESTED_CONCEPT", json_all, updatedLines)
-    updatedLines <- gsub("CLINICAL_CONTEXT", clinicalContext, updatedLines)
-    updatedLines <- gsub("ADDITIONAL_INFORMATION", clinicalDefinition, updatedLines)
-
-    prompt <- paste(updatedLines, collapse = "\n")
-    lastPrompt <- prompt
-    saveLastPrompt(prompt)
-
-    systemPrompt <- "You are an expert medical doctor specializing in healthcare data analysis. Your primary function is to analyze healthcare data, including electronic health records, to infer causal relationships between exposures and health outcomes."
-
-    llmClient$set_system_prompt(systemPrompt)
-
-    ellmerTypeObject <- ellmer::type_array(ellmer::type_object(
-      conceptId = ellmer::type_string(),
-      suggestedConcept = ellmer::type_string(),
-      rationale = ellmer::type_string()
-    ))
-
-    newConceptList <- queryLLM(llmClient = llmClient,
-                               prompt,
-                               systemPrompt = systemPrompt,
-                               ellmerTypeObject = ellmerTypeObject)
-
+    conceptsToRemove[[length(conceptsToRemove) + 1]] <- queryLLM(llmClient = llmClient,
+                                                                 systemPrompt = systemPrompt,
+                                                                 prompt = prompt,
+                                                                 ellmerTypeObject = outputType)
     startPoint <- endPoint + 1
     endPoint <- min(startPoint + bucketSize, nrow(conceptList))
-
-    if(nrow(newConceptList) > 0 & ncol(newConceptList) == 4) {
-      newConceptList$tested <- T
-
-      newConceptList$mainCondition <- baseCondition
-      newConceptList$model <- llmClient$get_model()
-      results <- rbind(results, newConceptList)
-    }
   }
-
-
-  return(results)
+  conceptsToRemove <- bind_rows(conceptsToRemove)
+  return(conceptsToRemove)
 }
 
 getClinicalSynonyms <- function(concept, llmClient) {
+  # promptUp <- "inst/prompts/clinicalSynonyms.txt"
   promptUp <- system.file("prompts", "clinicalSynonyms.txt", package = "Phenelope")
   originalLines <- readLines(promptUp)
 
@@ -1118,37 +1129,31 @@ getClinicalSynonyms <- function(concept, llmClient) {
   lastPrompt <- prompt
   saveLastPrompt(prompt)
 
-  systemPrompt <- "You are an expert medical doctor specializing in healthcare data analysis. Your primary function is to analyze healthcare data, including electronic health records, to infer causal relationships between exposures and health outcomes."
-
   ellmerTypeObject <- ellmer::type_object(
-    mainConcept = ellmer::type_string(),
-    synonymousBucketNames = ellmer::type_string())
+    synonymousBucketNames = ellmer::type_array(ellmer::type_string())
+  )
 
   results <- queryLLM(llmClient = llmClient,
                       prompt,
-                      systemPrompt = systemPrompt,
                       ellmerTypeObject = ellmerTypeObject)
-
+  results <- sort(unique(c(results$synonymousBucketNames, concept)))
   return(results)
 }
 
-getHecateSearchList <- function(hecateSearchString,
+getHecateSearchList <- function(synonyms,
                                 domains,
                                 conceptClasses,
                                 vectorSearchSize,
                                 standardOnly) {
-  #convert semi-colon separated search string into a vector
-  searchVector <- trimws(strsplit(hecateSearchString, ";")[[1]])
-
   allSeeds <- NULL
-  for(searchUp in 1:length(searchVector)) {
+  for(searchUp in 1:length(synonyms)) {
     if(standardOnly == TRUE) {
-      seeds <- .vectorSearchStandard(term = searchVector[[searchUp]],
+      seeds <- .vectorSearchStandard(term = synonyms[[searchUp]],
                                      domains = domains,
                                      conceptClasses = conceptClasses,
                                      limit = vectorSearchSize)
     } else {
-      seeds <- .vectorSearch(term = searchVector[[searchUp]],
+      seeds <- .vectorSearch(term = synonyms[[searchUp]],
                              domains = domains,
                              # conceptClasses = classes,
                              limit = vectorSearchSize)
