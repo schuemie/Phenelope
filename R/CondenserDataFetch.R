@@ -25,9 +25,7 @@
 #'                             `connectionDetails` is provided.
 #' @param cdmDatabaseSchema    A database schema holding the OHDSI Vocabulary
 #'                             tables.
-#' @param tempEmulationSchema  For database platforms that do not natively
-#'                             support temp tables, a database schema where the
-#'                             user has write access.
+#' @template TempEmulationSchema
 #' @param excludedVocabularies Vocabularies not to be included in the condensing function
 #'
 #' @returns

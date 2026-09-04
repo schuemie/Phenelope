@@ -41,8 +41,8 @@ Return valid JSON only:
 
 [
   {
-    "conceptId": "Candidate Concept id",
-    "conceptName": "Candidate Concept name",
+    "conceptId": <Candidate Concept id>,
+    "conceptName": "<Candidate Concept name>",
     "rationale": "Brief explanation of why the concept does not imply the Target Term"
   }
 ]

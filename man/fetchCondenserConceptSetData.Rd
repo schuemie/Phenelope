@@ -27,9 +27,8 @@ Is ignored if `connection` is provided.}
 \item{cdmDatabaseSchema}{A database schema holding the OHDSI Vocabulary
 tables.}
 
-\item{tempEmulationSchema}{For database platforms that do not natively
-support temp tables, a database schema where the
-user has write access.}
+\item{tempEmulationSchema}{For database platforms that do not natively support temp tables, a database schema where
+the user has write access.}
 
 \item{excludedVocabularies}{Vocabularies not to be included in the condensing function}
 }

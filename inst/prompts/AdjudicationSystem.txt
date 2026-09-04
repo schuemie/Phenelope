@@ -42,10 +42,10 @@ Return valid JSON only:
 
 [
   {
-    "conceptId": "Candidate Concept id",
-    "conceptName": "Candidate Concept name",
-	"decision": "KEEP",
-    "rationale": "Brief rational for the decision"
+    "conceptId": <Candidate Concept id>,
+    "conceptName": "<Candidate Concept name>",
+    "decision": "KEEP",
+    "rationale": "<Brief rational for the decision>"
   }
 ]
 
