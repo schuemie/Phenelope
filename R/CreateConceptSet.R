@@ -21,7 +21,7 @@
 #' @param name                      The name of the concept set to create. This should be an informative name reflecting
 #'                                  the concept set target (the idea expressed by the concept set).
 #' @param seedConceptIds            Optional: a set of one or more concept IDs that resemble the concept set target.
-#' @param clinicalDefinition        Optional: a clinical definition of the concept set target.
+#' @template ClinicalDefinition
 #' @template LlmClient
 #' @template ConnectionDetails
 #' @template VocabDatabaseSchema
