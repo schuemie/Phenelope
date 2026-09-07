@@ -25,6 +25,14 @@ asConcepts <- function(dataFrame, origin = NULL, status = NULL) {
   }
   class(dataFrame) <- c("Concepts", class(dataFrame))
   validateConcepts(dataFrame)
+  dataFrame <- dataFrame |>
+    mutate(conceptId = as.integer(.data$conceptId),
+           conceptName = as.character(.data$conceptName),
+           vocabularyId = as.character(.data$vocabularyId),
+           domainId = as.character(.data$domainId),
+           conceptClassId = as.character(.data$conceptClassId),
+           origin = as.character(.data$origin),
+           status = as.character(.data$status))
   return(dataFrame)
 }
 
@@ -65,8 +73,8 @@ asConceptSetExpression <- function(concepts, name, connection, vocabDatabaseSche
   conceptSet <- Capr::cs(approvedConceptIds, name = name)
 
   conceptSet <- Capr::getConceptSetDetails(conceptSet, connection, vocabularyDatabaseSchema = vocabDatabaseSchema)
-  return(conceptSet)
-  # conceptSet <- jsonlite::fromJSON(Capr::as.json(conceptSet))
+  json <- Capr::toConceptSetJson(conceptSet)
+  return(json)
 }
 
 getConceptsFromIds <- function(conceptIds, origin = "SEED", status = "UNADJUDICATED", connection, vocabDatabaseSchema) {

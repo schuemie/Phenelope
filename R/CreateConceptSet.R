@@ -11,7 +11,7 @@
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
+# See the License for the specific language governing permissions andD
 # limitations under the License.
 
 # source("R/HelperFunctions.R")
@@ -166,18 +166,27 @@ createConceptSet <- function(
   }
 
   # Convert to (condensed) concept set expression ----------------------------------------------------------------------
-  conceptSetExpression <- asConceptSetExpression(concepts = concepts,
-                                                 name = name,
-                                                 connection = connection,
-                                                 vocabDatabaseSchema = vocabDatabaseSchema)
-  if (condenseConceptSet) {
-    message("Condensing concept set expression")
-    conceptSetExpression <- doCondense(conceptSetExpression = conceptSetExpression,
-                                       connection = connection,
-                                       vocabDatabaseSchema = vocabDatabaseSchema,
-                                       tempEmulationSchema = tempEmulationSchema,
-                                       excludedVocabularyIds = excludedVocabularyIds)
+  if (!is.null(cacheFolder)) {
+    readr::write_csv(concepts, file.path(cacheFolder, "FinalConcepts.csv"))
   }
+  conceptSetExpression <- withCache({
+    conceptSetExpression <- asConceptSetExpression(concepts = concepts,
+                                                   name = name,
+                                                   connection = connection,
+                                                   vocabDatabaseSchema = vocabDatabaseSchema)
+    if (condenseConceptSet) {
+      message("Condensing concept set expression")
+      conceptSetExpression <- doCondense(conceptSetExpression = conceptSetExpression,
+                                         connection = connection,
+                                         vocabDatabaseSchema = vocabDatabaseSchema,
+                                         tempEmulationSchema = tempEmulationSchema,
+                                         excludedVocabularyIds = excludedVocabularyIds)
+    }
+    conceptSetExpression
+  },
+  cacheFolder = cacheFolder,
+  fileName = "ConceptSetExpression.json"
+  )
 
   delta <- Sys.time() - start
   message("Creating concept set took ", signif(delta, 3), " ", attr(delta, "units"), " and cost $", costTracker$amount, ".")
@@ -193,5 +202,6 @@ doCondense <- function(conceptSetExpression, connection, vocabDatabaseSchema, te
     excludedVocabularies = excludedVocabularyIds
   )
   condensedConceptSet <- condenseConceptSet(conceptSetData)
+  condensedConceptSet <- jsonlite::toJSON(condensedConceptSet, pretty = TRUE, auto_unbox = TRUE)
   return(condensedConceptSet)
 }

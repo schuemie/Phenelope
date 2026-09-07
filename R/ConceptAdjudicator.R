@@ -141,7 +141,6 @@ DefaultConceptAdjudicator <- R6::R6Class(
     #' Adjudicates concepts using the default LLM implementation.
     adjudicateConcepts = function(concepts, llmClient, costTracker = NULL) {
       validateConcepts(concepts)
-
       if (nrow(concepts) >= private$nForQuickScreen) {
         concepts <- quickScreen(concepts = concepts,
                                 name = name,
@@ -223,15 +222,20 @@ quickScreen <- function(concepts,
   }
   conceptsToRemove <- bind_rows(conceptsToRemove)
 
-  concepts <- bind_rows(
+  results <- concepts |>
+    filter(!.data$conceptId %in% conceptsToRemove$conceptId)
+
+  if ("rationale" %in% colnames(concepts)) {
+    concepts <- concepts |>
+      select(-"rationale")
+  }
+  results <- bind_rows(
+    results,
     concepts |>
-      filter(!.data$conceptId %in% conceptsToRemove$conceptId),
-    concepts |>
-      suppressWarnings(select(-one_of("rationale"))) |>
       inner_join(conceptsToRemove |>
                    select("conceptId", "rationale"),
                  by = join_by("conceptId")) |>
-      mutate(rational = paste("Quick screen:", .data$rationale),
+      mutate(rationale = paste("Quick screen:", .data$rationale),
              status = "REJECTED")
   )
   return(concepts)
@@ -269,17 +273,19 @@ adjudicate <- function(concepts,
                                                   name = name,
                                                   clinicalDefinition = clinicalDefinition,
                                                   concepts = batch)
-    adjudicatedConcepts[[length(adjudicatedConcepts) + 1]] <- queryLlm(prompt = prompt,
-                                                                       systemPrompt = systemPrompt,
+    adjudicatedConcepts[[length(adjudicatedConcepts) + 1]] <- queryLlm(prompt = instantiatedPrompt,
+                                                                       systemPrompt = instantiatedSystemPrompt,
                                                                        llmClient = llmClient,
                                                                        costTracker = costTracker,
                                                                        outputType = outputType)
     start <- end + 1
   }
   adjudicatedConcepts <- bind_rows(adjudicatedConcepts)
-
+  if ("rationale" %in% colnames(concepts)) {
+    concepts <- concepts |>
+      select(-"rationale")
+  }
   concepts <- concepts |>
-    suppressWarnings(select(-one_of("rationale"))) |>
     inner_join(adjudicatedConcepts |>
                  select("conceptId", "decision", "rationale"),
                by = join_by("conceptId")) |>

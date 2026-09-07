@@ -1,12 +1,11 @@
 library(Phenelope)
 
 llmClientO3 <- ellmer::chat_azure_openai(
-  endpoint = gsub("/openai/deployments.*", "", keyring::key_get("genai_o3_endpoint")),
+  endpoint = keyring::key_get("genai_openai_endpoint"),
   api_version = "2024-12-01-preview",
   model = "o3",
   credentials = function() keyring::key_get("genai_api_gpt4_key")
 )
-
 
 vocabDatabaseSchema <- "merative_ccae.cdm_merative_ccae_v3789"
 
@@ -19,16 +18,17 @@ connectionDetails <- DatabaseConnector::createConnectionDetails(
 options(sqlRenderTempEmulationSchema = "scratch.scratch_mschuemi")
 
 
-# name <- "Acute liver failure"
-# clinicalDefinition <- "Acute liver failure is a rare but life-threatening syndrome characterized by the rapid deterioration of hepatocellular function, manifesting as significant coagulopathy and hepatic encephalopathy of any grade, developing within 28 days of the onset of jaundice or initial hepatic symptoms in an individual without evidence of pre-existing chronic liver disease or cirrhosis. The syndrome arises from a direct, primary insult to hepatocytes — including viral, toxic, drug-induced, autoimmune, metabolic, or indeterminate causes — and is conceptually distinct from liver dysfunction occurring as a secondary consequence of hemodynamic compromise (e.g., ischemic hepatitis, shock liver), systemic sepsis, or passive hepatic congestion from right-sided heart failure, all of which are explicitly excluded."
-#
-# conceptSet <- createConceptSet(
-#   name = name,
-#   clinicalDefinition = clinicalDefinition,
-#   llmClient = llmClientO3,
-#   connectionDetails = connectionDetails,
-#   vocabDatabaseSchema = vocabDatabaseSchema
-# )
+name <- "Acute liver failure"
+clinicalDefinition <- "Acute liver failure is a rare but life-threatening syndrome characterized by the rapid deterioration of hepatocellular function, manifesting as significant coagulopathy and hepatic encephalopathy of any grade, developing within 28 days of the onset of jaundice or initial hepatic symptoms in an individual without evidence of pre-existing chronic liver disease or cirrhosis. The syndrome arises from a direct, primary insult to hepatocytes — including viral, toxic, drug-induced, autoimmune, metabolic, or indeterminate causes — and is conceptually distinct from liver dysfunction occurring as a secondary consequence of hemodynamic compromise (e.g., ischemic hepatitis, shock liver), systemic sepsis, or passive hepatic congestion from right-sided heart failure, all of which are explicitly excluded."
+
+conceptSet <- createConceptSet(
+  name = name,
+  clinicalDefinition = clinicalDefinition,
+  llmClient = llmClientO3,
+  connectionDetails = connectionDetails,
+  vocabDatabaseSchema = vocabDatabaseSchema,
+  cacheFolder = "cacheAlf"
+)
 
 connection <- DatabaseConnector::connect(connectionDetails)
 

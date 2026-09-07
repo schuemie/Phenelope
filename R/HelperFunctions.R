@@ -72,8 +72,9 @@ withCache <- function(expression, cacheFolder, fileName) {
     if (file.exists(file.path(cacheFolder, fileName))) {
       result <- switch(ext,
                        "rds" = readRDS(file.path(cacheFolder, fileName)),
-                       "csv" = readr::read_csv(file.path(cacheFolder, fileName)),
-                       "txt" = readLines(file.path(cacheFolder, fileName)))
+                       "csv" = readr::read_csv(file.path(cacheFolder, fileName), show_col_types = FALSE),
+                       "txt" = readLines(file.path(cacheFolder, fileName)),
+                       "json" = readLines(file.path(cacheFolder, fileName)))
       if (ext == "csv" && "origin" %in% colnames(result) && "status" %in% colnames(result)) {
         result <- asConcepts(result)
       }
@@ -86,7 +87,8 @@ withCache <- function(expression, cacheFolder, fileName) {
     switch(ext,
            "rds" = saveRDS(result, file = file.path(cacheFolder, fileName)),
            "csv" = readr::write_csv(result, file.path(cacheFolder, fileName)),
-           "txt" = writeLines(as.character(result), con = file.path(cacheFolder, fileName)))
+           "txt" = writeLines(as.character(result), con = file.path(cacheFolder, fileName)),
+           "json" = writeLines(as.character(result), con = file.path(cacheFolder, fileName)))
   }
   return(result)
 }
