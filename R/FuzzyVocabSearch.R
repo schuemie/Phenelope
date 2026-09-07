@@ -58,7 +58,8 @@ searchConceptsHecate = function(term, domainIds = NULL, conceptClassIds = NULL, 
       content_text <- httr::content(response, "text", encoding = "UTF-8")
       data <- jsonlite::fromJSON(content_text)
       data <- bind_rows(data$concepts) |>
-        SqlRender::snakeCaseToCamelCaseNames()
+        SqlRender::snakeCaseToCamelCaseNames() |>
+        as_tibble()
       return(data)
     }
     if (attempt < maxRetries) {

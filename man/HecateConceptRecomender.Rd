@@ -49,7 +49,7 @@ HecateConceptRecomender constructor
     \preformatted{HecateConceptRecomender$recommendConcepts(
   conceptIds,
   domainSettings,
-  excludedVocabularyIds,
+  excludedVocabularyIds = NULL,
   connection,
   vocabDatabaseSchema
 )}

@@ -33,7 +33,7 @@ ConceptRecommender <- R6::R6Class(
     #' removed.
     #'
     #' @export
-    recommendConcepts = function(conceptIds, domainSettings, excludedVocabularyIds, connection, vocabDatabaseSchema) {}
+    recommendConcepts = function(conceptIds, domainSettings, excludedVocabularyIds = NULL, connection, vocabDatabaseSchema) {}
   )
 )
 
@@ -59,7 +59,7 @@ HecateConceptRecomender <- R6::R6Class(
     },
     #' @description
     #' Recommends concepts using the Hecate Phoebe implementation.
-    recommendConcepts = function(conceptIds, domainSettings, excludedVocabularyIds, connection, vocabDatabaseSchema) {
+    recommendConcepts = function(conceptIds, domainSettings, excludedVocabularyIds = NULL, connection, vocabDatabaseSchema) {
       message("  Adding descendants")
       descendants <- getDescendants(conceptIds = conceptIds,
                                     domainSettings = domainSettings,
@@ -80,7 +80,7 @@ HecateConceptRecomender <- R6::R6Class(
                                                minCount = private$minCount,
                                                connection = connection,
                                                vocabDatabaseSchema = vocabDatabaseSchema)
-      message("  - Found ", nrow(recommendations), " additional concepts through Phoebbe recommendations")
+      message("  - Found ", nrow(recommendations), " additional concepts through Phoebe recommendations")
       concepts <- bind_rows(
         descendants |>
           mutate(status = "DESCENDANT"),
@@ -139,8 +139,9 @@ filterRecommendations <- function(recommendations, domainSettings, excludedVocab
                                               connection = connection,
                                               vocabDatabaseSchema = vocabDatabaseSchema)
   recommendations <- recommendations |>
+    select("conceptId", "relationshipId", "recordCount") |>
     inner_join(conceptInformation |>
-                 select("conceptId", "domainId", "conceptClassId"),
+                 select("conceptId", "conceptName", "vocabularyId", "domainId", "conceptClassId"),
                by = join_by("conceptId"))
   if (!is.null(domainSettings$domainIds)) {
     recommendations <- recommendations |>
@@ -162,6 +163,9 @@ filterRecommendations <- function(recommendations, domainSettings, excludedVocab
     recommendations <- recommendations |>
       filter(.data$recordCount >= minCount)
   }
+  recommendations <- recommendations |>
+    select("conceptId", "conceptName", "vocabularyId", "domainId", "conceptClassId") |>
+    distinct()
   return(recommendations)
 }
 

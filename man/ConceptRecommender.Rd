@@ -24,7 +24,7 @@ Recommend concepts
     \preformatted{ConceptRecommender$recommendConcepts(
   conceptIds,
   domainSettings,
-  excludedVocabularyIds,
+  excludedVocabularyIds = NULL,
   connection,
   vocabDatabaseSchema
 )}

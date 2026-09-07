@@ -44,15 +44,33 @@ createFindSeedConceptSettings <- function(addSynonyms = FALSE,
   )
 }
 
-# findSeedConceptSettings = createFindSeedConceptSettings()
+#' Find seed concepts
+#'
+#' @param name                    The name to use to find concepts.
+#' @template LlmClient
+#' @template CostTracker
+#' @param findSeedConceptSettings A setting object as created by `createFindSeedConceptSettings()`.
+#' @param domainIds               Optional: A character vector of domain IDs to restrict to.
+#' @param conceptClassIds         Optional: A character vector of concept class IDs to restrict to.
+#'
+#' @description
+#' The `llmClient` is only used when `addSynonyms` is `TRUE` in the settings.#'
+#'
+#' @returns
+#' Returns an object of type Concepts with the seed concepts.
+#'
+#' @export
 findSeedConcepts <- function(name,
-                             llmClient,
-                             costTracker,
-                             connection,
-                             vocabDatabaseSchema,
-                             findSeedConceptSettings,
-                             domainIds,
-                             conceptClassIds) {
+                             llmClient = NULL,
+                             costTracker = NULL,
+                             findSeedConceptSettings = createFindSeedConceptSettings(),
+                             domainIds = NULL,
+                             conceptClassIds = NULL) {
+  errorMessages <- checkmate::makeAssertCollection()
+  checkmate::assertCharacter(name, len = 1, add = errorMessages)
+  checkmate::assertR6(llmClient, "Chat", null.ok = TRUE, add = errorMessages)
+  # TODO: add more checks
+  checkmate::reportAssertions(collection = errorMessages)
   if (findSeedConceptSettings$addSynonyms) {
     message("  Adding synonyms to name")
     names <- unique(c(name, getSynonyms(name, llmClient, costTracker)))
