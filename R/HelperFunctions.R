@@ -89,6 +89,3 @@ withCache <- function(expression, cacheFolder, fileName) {
   }
   return(result)
 }
-
-
-

@@ -75,4 +75,3 @@ searchConceptsHecate = function(term, domainSettings, excludedVocabularyIds, max
   }
   stop(sprintf("All %s attempts failed for term '%s'.", maxRetries, term))
 }
-

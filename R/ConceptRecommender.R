@@ -54,11 +54,23 @@ HecateConceptRecomender <- R6::R6Class(
     #'
     #' @export
     initialize = function(minCount = 0) {
+      errorMessages <- checkmate::makeAssertCollection()
+      checkmate::assertIntegerish(minCount, len = 1, lower = 0, add = errorMessages)
+      checkmate::reportAssertions(collection = errorMessages)
+
       private$minCount <- minCount
     },
     #' @description
     #' Recommends concepts using the Hecate Phoebe implementation.
     recommendConcepts = function(conceptIds, domainSettings, excludedVocabularyIds = NULL, connection, vocabDatabaseSchema) {
+      errorMessages <- checkmate::makeAssertCollection()
+      checkmate::assertIntegerish(conceptIds, min.len = 1, add = errorMessages)
+      checkmate::assertClass(domainSettings, "DomainSettings", add = errorMessages)
+      checkmate::assertCharacter(excludedVocabularyIds, null.ok = TRUE, add = errorMessages)
+      checkmate::assertClass(connection, "DatabaseConnectorConnection", add = errorMessages)
+      checkmate::assertCharacter(vocabDatabaseSchema, len = 1, add = errorMessages)
+      checkmate::reportAssertions(collection = errorMessages)
+
       message("  Adding descendants")
       # Note: getDescendants returns an object of type Concepts:
       descendants <- getDescendants(conceptIds = conceptIds,

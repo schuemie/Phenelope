@@ -23,6 +23,8 @@ ConceptAdjudicator <- R6::R6Class(
     #' Adjudicate concepts
     #'
     #' @template Concepts
+    #' @param name The name of the concept set.
+    #' @template ClinicalDefinition
     #' @template LlmClient
     #' @template CostTracker
     #'
@@ -31,7 +33,7 @@ ConceptAdjudicator <- R6::R6Class(
     #' and an additional `rationale` column capturing the LLM rationale.
     #'
     #' @export
-    adjudicateConcepts = function(concepts, llmClient, costTracker = NULL) {}
+    adjudicateConcepts = function(concepts, name, clinicalDefinition = NULL, llmClient, costTracker = NULL) {}
   )
 )
 
@@ -107,6 +109,16 @@ DefaultConceptAdjudicator <- R6::R6Class(
                           systemPrompt = NULL,
                           quickScreenPrompt = NULL,
                           quickScreenSystemPrompt = NULL) {
+      errorMessages <- checkmate::makeAssertCollection()
+      checkmate::assertIntegerish(batchSize, len = 1, lower = 1, add = errorMessages)
+      checkmate::assertIntegerish(nForQuickScreen, len = 1, lower = 1, add = errorMessages)
+      checkmate::assertIntegerish(quickScreenBatchSize, len = 1, lower = 1, add = errorMessages)
+      checkmate::assertCharacter(prompt, len = 1, null.ok = TRUE, add = errorMessages)
+      checkmate::assertCharacter(systemPrompt, len = 1, null.ok = TRUE, add = errorMessages)
+      checkmate::assertCharacter(quickScreenPrompt, len = 1, null.ok = TRUE, add = errorMessages)
+      checkmate::assertCharacter(quickScreenSystemPrompt, len = 1, null.ok = TRUE, add = errorMessages)
+      checkmate::reportAssertions(collection = errorMessages)
+
       private$batchSize = batchSize
       private$nForQuickScreen = nForQuickScreen
       private$quickScreenBatchSize = quickScreenBatchSize
@@ -139,8 +151,15 @@ DefaultConceptAdjudicator <- R6::R6Class(
     },
     #' @description
     #' Adjudicates concepts using the default LLM implementation.
-    adjudicateConcepts = function(concepts, llmClient, costTracker = NULL) {
+    adjudicateConcepts = function(concepts, name, clinicalDefinition = NULL, llmClient, costTracker = NULL) {
       validateConcepts(concepts)
+      errorMessages <- checkmate::makeAssertCollection()
+      checkmate::assertCharacter(name, len = 1, add = errorMessages)
+      checkmate::assertCharacter(clinicalDefinition, len = 1, null.ok = TRUE, add = errorMessages)
+      checkmate::assertR6(llmClient, "Chat", add = errorMessages)
+      checkmate::assertEnvironment(costTracker, null.ok = TRUE, add = errorMessages)
+      checkmate::reportAssertions(collection = errorMessages)
+
       if (nrow(concepts) >= private$nForQuickScreen) {
         concepts <- quickScreen(concepts = concepts,
                                 name = name,

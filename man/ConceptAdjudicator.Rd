@@ -19,13 +19,21 @@ Adjudicate concepts
 \subsection{\code{ConceptAdjudicator$adjudicateConcepts()}}{
   \subsection{Usage}{
     \if{html}{\out{<div class="r">}}
-    \preformatted{ConceptAdjudicator$adjudicateConcepts(concepts, llmClient, costTracker = NULL)}
+    \preformatted{ConceptAdjudicator$adjudicateConcepts(
+  concepts,
+  name,
+  clinicalDefinition = NULL,
+  llmClient,
+  costTracker = NULL
+)}
     \if{html}{\out{</div>}}
   }
   \subsection{Arguments}{
     \if{html}{\out{<div class="arguments">}}
     \describe{
       \item{\code{concepts}}{An object of type \code{Concepts} as created using \code{asConcepts()}.}
+      \item{\code{name}}{The name of the concept set.}
+      \item{\code{clinicalDefinition}}{Optional: a clinical definition of the concept set target.}
       \item{\code{llmClient}}{An \code{ellmer} chat object to connect to a large language model, as created for example using
 \code{ellmer::chat_ollama()}.}
       \item{\code{costTracker}}{An environment with an \code{amount} variable for keeping track of the total LLM costs.}

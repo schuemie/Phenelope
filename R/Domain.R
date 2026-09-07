@@ -25,6 +25,12 @@
 #'
 #' @export
 getDomain <- function(name, llmClient, costTracker = NULL) {
+  errorMessages <- checkmate::makeAssertCollection()
+  checkmate::assertCharacter(name, len = 1, add = errorMessages)
+  checkmate::assertR6(llmClient, "Chat", add = errorMessages)
+  checkmate::assertEnvironment(costTracker, null.ok = TRUE, add = errorMessages)
+  checkmate::reportAssertions(collection = errorMessages)
+
   # promptFile <- "inst/prompts/Domain.txt"
   promptFile <- system.file("prompts", "Domain.txt", package = "Phenelope")
   prompt <- paste(readLines(promptFile), collapse = "\n")

@@ -1,0 +1,15 @@
+library(testthat)
+library(Phenelope)
+
+test_that("findSeedConcepts validates inputs", {
+  expect_error(findSeedConcepts(name = 1), "name")
+  expect_error(findSeedConcepts(name = character()), "name")
+  expect_error(findSeedConcepts(name = c("Condition", "Procedure")), "name")
+  expect_error(findSeedConcepts(name = "Condition", clinicalDefinition = 1), "clinicalDefinition")
+  expect_error(findSeedConcepts(name = "Condition", clinicalDefinition = character()), "clinicalDefinition")
+  expect_error(findSeedConcepts(name = "Condition", llmClient = environment()), "R6")
+  expect_error(findSeedConcepts(name = "Condition", costTracker = 1), "environment")
+  expect_error(findSeedConcepts(name = "Condition", findSeedConceptSettings = list()), "FindSeedConceptSettings")
+  expect_error(findSeedConcepts(name = "Condition", domainSettings = list()), "DomainSettings")
+  expect_error(findSeedConcepts(name = "Condition", excludedVocabularyIds = 1), "excludedVocabularyIds")
+})

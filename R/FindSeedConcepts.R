@@ -20,6 +20,8 @@
 #' @param maxN Maximum number of seed concepts to return.
 #' @param minCount Minimum number of record counts for a concept to be included.
 #' @param fuzzyVocabSearchType Type of fuzzy vocabulary search. Currently only 'HECATE' is supported.
+#' @param adjudicateFuzzySearchResults Perform a first pass adjudication on the fuzzy vocabulary search results to
+#'                                     remove concepts that are obviously wrong?
 #'
 #' @returns
 #' A settings object.
@@ -72,8 +74,12 @@ findSeedConcepts <- function(name,
                              excludedVocabularyIds = NULL) {
   errorMessages <- checkmate::makeAssertCollection()
   checkmate::assertCharacter(name, len = 1, add = errorMessages)
+  checkmate::assertCharacter(clinicalDefinition, len = 1, null.ok = TRUE, add = errorMessages)
   checkmate::assertR6(llmClient, "Chat", null.ok = TRUE, add = errorMessages)
-  # TODO: add more checks
+  checkmate::assertEnvironment(costTracker, null.ok = TRUE, add = errorMessages)
+  checkmate::assertClass(findSeedConceptSettings, "FindSeedConceptSettings", add = errorMessages)
+  checkmate::assertClass(domainSettings, "DomainSettings", null.ok = TRUE, add = errorMessages)
+  checkmate::assertCharacter(excludedVocabularyIds, null.ok = TRUE, add = errorMessages)
   checkmate::reportAssertions(collection = errorMessages)
   if (findSeedConceptSettings$addSynonyms) {
     message("  Adding synonyms to name")

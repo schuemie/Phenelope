@@ -153,6 +153,8 @@ createConceptSet <- function(
       filter(.data$status == "UNADJUDICATED")
     adjudicatedConcepts <- withCache({
       conceptAdjudicator$adjudicateConcepts(concepts = conceptsToAdjudicate,
+                                            name = name,
+                                            clinicalDefinition = clinicalDefinition,
                                             llmClient = llmClient,
                                             costTracker = costTracker)
     },
