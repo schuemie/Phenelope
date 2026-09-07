@@ -28,11 +28,11 @@ the concept set target (the idea expressed by the concept set).}
 
 \item{clinicalDefinition}{Optional: a clinical definition of the concept set target.}
 
-\item{llmClient}{An `ellmer` chat object to connect to a large language model, as created for example using
-`ellmer::chat_ollama()`.}
+\item{llmClient}{An \code{ellmer} chat object to connect to a large language model, as created for example using
+\code{ellmer::chat_ollama()}.}
 
 \item{connectionDetails}{An object with details for connecting to a database server, as created using
-`DatabaseConnector::createConnectionDetails()`.}
+\code{DatabaseConnector::createConnectionDetails()}.}
 
 \item{vocabDatabaseSchema}{The database and or schema where the OHDSI Vocabulary tables are loaded.}
 
@@ -43,12 +43,12 @@ the user has write access.}
 
 \item{excludedVocabularyIds}{Character vector of OHDSI Vocabulary names to exclude.}
 
-\item{findSeedConceptSettings}{A settings object for finding seed concepts (when not provided in `seedConceptIds`)
-as created using `createFindSeedConceptSettings()`.}
+\item{findSeedConceptSettings}{A settings object for finding seed concepts (when not provided in \code{seedConceptIds})
+as created using \code{createFindSeedConceptSettings()}.}
 
-\item{conceptRecommender}{An object of class `ConceptRecommender` for recommending additional concepts.}
+\item{conceptRecommender}{An object of class \code{ConceptRecommender} for recommending additional concepts.}
 
-\item{conceptAdjudicator}{An object of class `ConceptAdjudicator` for adjudicating recommended concepts.}
+\item{conceptAdjudicator}{An object of class \code{ConceptAdjudicator} for adjudicating recommended concepts.}
 
 \item{condenseConceptSet}{Condense the resulting concept set?}
 }

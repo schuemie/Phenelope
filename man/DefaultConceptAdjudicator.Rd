@@ -5,6 +5,48 @@
 \title{The default concept adjudicator using the LLM and prompts.}
 \description{
 DefaultConceptAdjudicator constructor
+
+This adjudicator implements a 2-stage concept adjudication process using prompts. If the number of input concepts
+is greater than or equal to \code{nForQuickScreen}, the quickscreen stage is entered. In this stage,
+\code{quickScreenBatchSize} concepts at a time are fed to the LLM using the \code{quickScreenPrompt} and
+\code{quickScreenSystemPrompt} prompts. Any remaining concepts go on to stage 2, where \code{batchSize} concepts are fed to
+the LLM using the \code{prompt} and
+\code{systemPrompt} prompts.
+
+The following placeholders in the prompts will be replaced with their actual values when adjudicating:
+\itemize{
+\item \strong{\%name\%}: The name of the concept set (the concept set target).
+\item \strong{\%definition\%}: The clinical definition of the concept set. If not provided during adjudication, the entire line with this placeholder will be deleted.
+\item \strong{\%concepts\%}: A JSON string representing the candidate concepts.
+}
+
+The following JSON output formats is expected for the main concept adjudication. This should include \strong{all
+concepts} from the input:
+
+\if{html}{\out{<div class="sourceCode json">}}\preformatted{[
+  \{
+    "conceptId": <Candidate Concept id>,
+    "conceptName": "<Candidate Concept name>",
+    "decision": "<KEEP or REMOVE>",
+    "rationale": "<Brief rational for the decision>"
+  \}
+]
+}\if{html}{\out{</div>}}
+
+The following JSON output formats is expected for the quick screening. This should include \emph{only concepts to
+remove}*:
+
+\if{html}{\out{<div class="sourceCode json">}}\preformatted{[
+  \{
+    "conceptId": <Candidate Concept id>,
+    "conceptName": "<Candidate Concept name>",
+    "rationale": "Brief explanation of why the concept does not imply the Target Term"
+  \}
+]
+}\if{html}{\out{</div>}}
+
+If a prompt is not provided in this constructor it will assume the default value included in this package.
+To disable the quick screen stage, set \code{nForQuickScreen = 999999}.
 }
 \section{Super class}{
 \code{\link[Phenelope:ConceptAdjudicator]{ConceptAdjudicator}} -> \code{DefaultConceptAdjudicator}
@@ -26,7 +68,11 @@ DefaultConceptAdjudicator constructor
     \preformatted{DefaultConceptAdjudicator$new(
   batchSize = 20,
   nForQuickScreen = 100,
-  quickScreenBatchSize = 200
+  quickScreenBatchSize = 200,
+  prompt = NULL,
+  systemPrompt = NULL,
+  quickScreenPrompt = NULL,
+  quickScreenSystemPrompt = NULL
 )}
     \if{html}{\out{</div>}}
   }
@@ -36,6 +82,10 @@ DefaultConceptAdjudicator constructor
       \item{\code{batchSize}}{The number of concepts to adjudicate at once.}
       \item{\code{nForQuickScreen}}{The minimum number of concepts to trigger the quick screening.}
       \item{\code{quickScreenBatchSize}}{The number of concepts to enter quick screening at once.}
+      \item{\code{prompt}}{The prompt for the main concept adjudication. See Details for requirements}
+      \item{\code{systemPrompt}}{The system prompt for the main concept adjudication. See Details for requirements}
+      \item{\code{quickScreenPrompt}}{The prompt for the quick screening. See Details for requirements}
+      \item{\code{quickScreenSystemPrompt}}{The system prompt for the quick screening. See Details for requirements}
     }
     \if{html}{\out{</div>}}
   }
@@ -51,16 +101,20 @@ DefaultConceptAdjudicator constructor
   Adjudicates concepts using the default LLM implementation.
   \subsection{Usage}{
     \if{html}{\out{<div class="r">}}
-    \preformatted{DefaultConceptAdjudicator$adjudicateConcepts(concepts, llmClient, costTracker)}
+    \preformatted{DefaultConceptAdjudicator$adjudicateConcepts(
+  concepts,
+  llmClient,
+  costTracker = NULL
+)}
     \if{html}{\out{</div>}}
   }
   \subsection{Arguments}{
     \if{html}{\out{<div class="arguments">}}
     \describe{
-      \item{\code{concepts}}{An object of type `Concepts` as created using `asConcepts()`.}
-      \item{\code{llmClient}}{An `ellmer` chat object to connect to a large language model, as created for example using
-`ellmer::chat_ollama()`.}
-      \item{\code{costTracker}}{An environment with an `amount` variable for keeping track of the total LLM costs.}
+      \item{\code{concepts}}{An object of type \code{Concepts} as created using \code{asConcepts()}.}
+      \item{\code{llmClient}}{An \code{ellmer} chat object to connect to a large language model, as created for example using
+\code{ellmer::chat_ollama()}.}
+      \item{\code{costTracker}}{An environment with an \code{amount} variable for keeping track of the total LLM costs.}
     }
     \if{html}{\out{</div>}}
   }

@@ -34,15 +34,15 @@ Recommend concepts
     \if{html}{\out{<div class="arguments">}}
     \describe{
       \item{\code{conceptIds}}{A set of concept IDs to find related concepts for.}
-      \item{\code{domainSettings}}{An object of type `DomainSettings` as created by `getDomainSettings()`.}
+      \item{\code{domainSettings}}{An object of type \code{DomainSettings} as created by \code{getDomainSettings()}.}
       \item{\code{excludedVocabularyIds}}{Character vector of OHDSI Vocabulary names to exclude.}
-      \item{\code{connection}}{An open connection to a database server, as created by `DatabaseConnector::connect()`.}
+      \item{\code{connection}}{An open connection to a database server, as created by \code{DatabaseConnector::connect()}.}
       \item{\code{vocabDatabaseSchema}}{The database and or schema where the OHDSI Vocabulary tables are loaded.}
     }
     \if{html}{\out{</div>}}
   }
   \subsection{Returns}{
-    An object of type `Concepts` containing the recommended concepts. Overlap with the input concepts is *not*
+    An object of type \code{Concepts} containing the recommended concepts. Overlap with the input concepts is \emph{not}
 removed.
   }
 }

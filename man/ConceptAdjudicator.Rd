@@ -19,22 +19,22 @@ Adjudicate concepts
 \subsection{\code{ConceptAdjudicator$adjudicateConcepts()}}{
   \subsection{Usage}{
     \if{html}{\out{<div class="r">}}
-    \preformatted{ConceptAdjudicator$adjudicateConcepts(concepts, llmClient, costTracker)}
+    \preformatted{ConceptAdjudicator$adjudicateConcepts(concepts, llmClient, costTracker = NULL)}
     \if{html}{\out{</div>}}
   }
   \subsection{Arguments}{
     \if{html}{\out{<div class="arguments">}}
     \describe{
-      \item{\code{concepts}}{An object of type `Concepts` as created using `asConcepts()`.}
-      \item{\code{llmClient}}{An `ellmer` chat object to connect to a large language model, as created for example using
-`ellmer::chat_ollama()`.}
-      \item{\code{costTracker}}{An environment with an `amount` variable for keeping track of the total LLM costs.}
+      \item{\code{concepts}}{An object of type \code{Concepts} as created using \code{asConcepts()}.}
+      \item{\code{llmClient}}{An \code{ellmer} chat object to connect to a large language model, as created for example using
+\code{ellmer::chat_ollama()}.}
+      \item{\code{costTracker}}{An environment with an \code{amount} variable for keeping track of the total LLM costs.}
     }
     \if{html}{\out{</div>}}
   }
   \subsection{Returns}{
-    The same concepts as provided in the input, but with their `status` tag set to either 'APPROVED' or 'REJECTED',
-and an additional `rationale` column capturing the LLM rationale.
+    The same concepts as provided in the input, but with their \code{status} tag set to either 'APPROVED' or 'REJECTED',
+and an additional \code{rationale} column capturing the LLM rationale.
   }
 }
 

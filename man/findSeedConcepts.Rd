@@ -9,27 +9,27 @@ findSeedConcepts(
   llmClient = NULL,
   costTracker = NULL,
   findSeedConceptSettings = createFindSeedConceptSettings(),
-  domainIds = NULL,
-  conceptClassIds = NULL
+  domainSettings = NULL,
+  excludedVocabularyIds = NULL
 )
 }
 \arguments{
 \item{name}{The name to use to find concepts.}
 
-\item{llmClient}{An `ellmer` chat object to connect to a large language model, as created for example using
-`ellmer::chat_ollama()`.}
+\item{llmClient}{An \code{ellmer} chat object to connect to a large language model, as created for example using
+\code{ellmer::chat_ollama()}.}
 
-\item{costTracker}{An environment with an `amount` variable for keeping track of the total LLM costs.}
+\item{costTracker}{An environment with an \code{amount} variable for keeping track of the total LLM costs.}
 
-\item{findSeedConceptSettings}{A setting object as created by `createFindSeedConceptSettings()`.}
+\item{findSeedConceptSettings}{A setting object as created by \code{createFindSeedConceptSettings()}.}
 
-\item{domainIds}{Optional: A character vector of domain IDs to restrict to.}
+\item{domainSettings}{An object of type \code{DomainSettings} as created by \code{getDomainSettings()}.}
 
-\item{conceptClassIds}{Optional: A character vector of concept class IDs to restrict to.}
+\item{excludedVocabularyIds}{Character vector of OHDSI Vocabulary names to exclude.}
 }
 \value{
 Returns an object of type Concepts with the seed concepts.
 }
 \description{
-The `llmClient` is only used when `addSynonyms` is `TRUE` in the settings.#'
+The \code{llmClient} is only used when \code{addSynonyms} is \code{TRUE} in the settings.#'
 }

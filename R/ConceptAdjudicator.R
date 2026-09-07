@@ -31,7 +31,7 @@ ConceptAdjudicator <- R6::R6Class(
     #' and an additional `rationale` column capturing the LLM rationale.
     #'
     #' @export
-    adjudicateConcepts = function(concepts, llmClient, costTracker) {}
+    adjudicateConcepts = function(concepts, llmClient, costTracker = NULL) {}
   )
 )
 
@@ -44,43 +44,126 @@ DefaultConceptAdjudicator <- R6::R6Class(
   public = list(
     #' DefaultConceptAdjudicator constructor
     #'
-    #' @param batchSize            The number of concepts to adjudicate at once.
-    #' @param nForQuickScreen      The minimum number of concepts to trigger the quick screening.
-    #' @param quickScreenBatchSize The number of concepts to enter quick screening at once.
+    #' @param batchSize               The number of concepts to adjudicate at once.
+    #' @param nForQuickScreen         The minimum number of concepts to trigger the quick screening.
+    #' @param quickScreenBatchSize    The number of concepts to enter quick screening at once.
+    #' @param prompt                  The prompt for the main concept adjudication. See Details for requirements
+    #' @param systemPrompt            The system prompt for the main concept adjudication. See Details for requirements
+    #' @param quickScreenPrompt       The prompt for the quick screening. See Details for requirements
+    #' @param quickScreenSystemPrompt The system prompt for the quick screening. See Details for requirements
+    #'
+    #' @details
+    #' This adjudicator implements a 2-stage concept adjudication process using prompts. If the number of input concepts
+    #' is greater than or equal to `nForQuickScreen`, the quickscreen stage is entered. In this stage,
+    #' `quickScreenBatchSize` concepts at a time are fed to the LLM using the `quickScreenPrompt` and
+    #' `quickScreenSystemPrompt` prompts. Any remaining concepts go on to stage 2, where `batchSize` concepts are fed to
+    #' the LLM using the `prompt` and
+    #' `systemPrompt` prompts.
+    #'
+    #' The following placeholders in the prompts will be replaced with their actual values when adjudicating:
+    #'
+    #' - **%name%**: The name of the concept set (the concept set target).
+    #' - **%definition%**: The clinical definition of the concept set. If not provided during adjudication, the entire line with this placeholder will be deleted.
+    #' - **%concepts%**: A JSON string representing the candidate concepts.
+    #'
+    #' The following JSON output formats is expected for the main concept adjudication. This should include **all
+    #' concepts** from the input:
+    #'
+    #' ```json
+    #' [
+    #'   {
+    #'     "conceptId": <Candidate Concept id>,
+    #'     "conceptName": "<Candidate Concept name>",
+    #'     "decision": "<KEEP or REMOVE>",
+    #'     "rationale": "<Brief rational for the decision>"
+    #'   }
+    #' ]
+    #' ```
+    #'
+    #' The following JSON output formats is expected for the quick screening. This should include *only concepts to
+    #' remove**:
+    #'
+    #' ```json
+    #' [
+    #'   {
+    #'     "conceptId": <Candidate Concept id>,
+    #'     "conceptName": "<Candidate Concept name>",
+    #'     "rationale": "Brief explanation of why the concept does not imply the Target Term"
+    #'   }
+    #' ]
+    #' ```
+    #'
+    #' If a prompt is not provided in this constructor it will assume the default value included in this package.
+    #' To disable the quick screen stage, set `nForQuickScreen = 999999`.
     #'
     #' @returns
     #' This is the constructor.
     #'
     #' @export
     initialize = function(batchSize = 20,
-                         nForQuickScreen = 100,
-                         quickScreenBatchSize = 200) {
+                          nForQuickScreen = 100,
+                          quickScreenBatchSize = 200,
+                          prompt = NULL,
+                          systemPrompt = NULL,
+                          quickScreenPrompt = NULL,
+                          quickScreenSystemPrompt = NULL) {
       private$batchSize = batchSize
       private$nForQuickScreen = nForQuickScreen
       private$quickScreenBatchSize = quickScreenBatchSize
+
+      if (is.null(prompt)) {
+        # promptFile <- "inst/prompts/Adjudication.txt"
+        promptFile <- system.file("prompts", "Adjudication.txt", package = "Phenelope")
+        prompt <- paste(readLines(promptFile), collapse = "\n")
+      }
+      if (is.null(systemPrompt)) {
+        # systemPromptFile <- "inst/prompts/AdjudicationSystem.txt"
+        systemPromptFile <- system.file("prompts", "AdjudicationSystem.txt", package = "Phenelope")
+        systemPrompt <- paste(readLines(systemPromptFile), collapse = "\n")
+      }
+      if (is.null(quickScreenPrompt)) {
+        # quickScreenPromptFile <- "inst/prompts/QuickScreen.txt"
+        quickScreenPromptFile <- system.file("prompts", "QuickScreen.txt", package = "Phenelope")
+        quickScreenPrompt <- paste(readLines(quickScreenPromptFile), collapse = "\n")
+      }
+      if (is.null(quickScreenSystemPrompt)) {
+        # quickScreenSystemPromptFile <- "inst/prompts/QuickScreenSystem.txt"
+        quickScreenSystemPromptFile <- system.file("prompts", "QuickScreenSystem.txt", package = "Phenelope")
+        quickScreenSystemPrompt <- paste(readLines(quickScreenSystemPromptFile), collapse = "\n")
+      }
+
+      private$prompt <- prompt
+      private$systemPrompt <- systemPrompt
+      private$quickScreenPrompt <- quickScreenPrompt
+      private$quickScreenSystemPrompt <- quickScreenSystemPrompt
     },
     #' @description
     #' Adjudicates concepts using the default LLM implementation.
-    adjudicateConcepts = function(concepts, llmClient, costTracker) {
+    adjudicateConcepts = function(concepts, llmClient, costTracker = NULL) {
       validateConcepts(concepts)
+
       if (nrow(concepts) >= private$nForQuickScreen) {
         concepts <- quickScreen(concepts = concepts,
-                                            name = name,
-                                            clinicalDefinition = clinicalDefinition,
-                                            batchSize = private$quickScreenBatchSize,
-                                            llmClient = llmClient,
-                                            costTracker = costTracker)
+                                name = name,
+                                clinicalDefinition = clinicalDefinition,
+                                batchSize = private$quickScreenBatchSize,
+                                quickScreenPrompt = private$quickScreenPrompt,
+                                quickScreenSystemPrompt = private$quickScreenSystemPrompt,
+                                llmClient = llmClient,
+                                costTracker = costTracker)
       }
       remainingConcepts <- concepts |>
         filter(.data$status != "REJECTED")
 
       if (nrow(remainingConcepts) > 0) {
         remainingConcepts <- adjudicate(concepts = remainingConcepts,
-                                           name = name,
-                                           clinicalDefinition = clinicalDefinition,
-                                           batchSize = private$batchSize,
-                                           llmClient = llmClient,
-                                           costTracker = costTracker)
+                                        name = name,
+                                        clinicalDefinition = clinicalDefinition,
+                                        batchSize = private$batchSize,
+                                        prompt = private$prompt,
+                                        systemPrompt = private$systemPrompt,
+                                        llmClient = llmClient,
+                                        costTracker = costTracker)
         concepts <- bind_rows(
           concepts |>
             filter(.data$status == "REJECTED"),
@@ -93,19 +176,22 @@ DefaultConceptAdjudicator <- R6::R6Class(
   private = list(
     batchSize = NULL,
     nForQuickScreen = NULL,
-    quickScreenBatchSize = NULL
+    quickScreenBatchSize = NULL,
+    prompt = NULL,
+    systemPrompt = NULL,
+    quickScreenPrompt = NULL,
+    quickScreenSystemPrompt = NULL
   )
 )
 
-quickScreen <- function(concepts, name, clinicalDefinition, batchSize, llmClient, costTracker) {
-  # systemPromptFile <- "inst/prompts/QuickScreenSystem.txt"
-  systemPromptFile <- system.file("prompts", "QuickScreenSystem.txt", package = "Phenelope")
-  systemPrompt <- paste(readLines(systemPromptFile), collapse = "\n")
-
-  # promptTemplateFile <- "inst/prompts/QuickScreen.txt"
-  promptTemplateFile <- system.file("prompts", "QuickScreen.txt", package = "Phenelope")
-  promptTemplate <- paste(readLines(promptTemplateFile), collapse = "\n")
-
+quickScreen <- function(concepts,
+                        name,
+                        clinicalDefinition,
+                        batchSize,
+                        quickScreenPrompt,
+                        quickScreenSystemPrompt,
+                        llmClient,
+                        costTracker) {
   outputType <- ellmer::type_array(
     ellmer::type_object(
       conceptId = ellmer::type_integer(),
@@ -120,22 +206,18 @@ quickScreen <- function(concepts, name, clinicalDefinition, batchSize, llmClient
     end <- min(start + batchSize - 1, nrow(concepts))
     message("  Quick screen for concepts ", start, " to ", end, " out of ", nrow(concepts))
     batch <- concepts[start:end, ]
-    prompt <- gsub("%name%", name, promptTemplate)
-    if (is.null(clinicalDefinition) || clinicalDefinition == "") {
-      # Delete entire line with %definition%
-      prompt <- gsub("\n[^\n]*%definition%[^\n]*\n", "", prompt)
-    } else {
-      prompt <- gsub("%definition%", clinicalDefinition, prompt)
-    }
-    json <- batch |>
-      select("conceptId", "conceptName") |>
-      jsonlite::toJSON(pretty = TRUE)
-    prompt <- gsub("%concepts%", json, prompt)
-
-    conceptsToRemove[[length(conceptsToRemove) + 1]] <- queryLlm(prompt = prompt,
-                                                                 systemPrompt = systemPrompt,
+    instantiatedPrompt <- instantiatePrompt(prompt = quickScreenPrompt,
+                                            name = name,
+                                            clinicalDefinition = clinicalDefinition,
+                                            concepts = batch)
+    instantiatedSystemPrompt <- instantiatePrompt(prompt = quickScreenSystemPrompt,
+                                                  name = name,
+                                                  clinicalDefinition = clinicalDefinition,
+                                                  concepts = batch)
+    conceptsToRemove[[length(conceptsToRemove) + 1]] <- queryLlm(prompt = instantiatedPrompt,
+                                                                 systemPrompt = instantiatedSystemPrompt,
                                                                  llmClient = llmClient,
-                                                                 costTracker,
+                                                                 costTracker = costTracker,
                                                                  outputType = outputType)
     start <- end + 1
   }
@@ -149,20 +231,20 @@ quickScreen <- function(concepts, name, clinicalDefinition, batchSize, llmClient
       inner_join(conceptsToRemove |>
                    select("conceptId", "rationale"),
                  by = join_by("conceptId")) |>
-      mutate(status = "REJECTED")
+      mutate(rational = paste("Quick screen:", .data$rationale),
+             status = "REJECTED")
   )
-
   return(concepts)
 }
 
-adjudicate <- function(concepts, name, clinicalDefinition, batchSize, llmClient, costTracker) {
-  # systemPromptFile <- "inst/prompts/AdjudicationSystem.txt"
-  systemPromptFile <- system.file("prompts", "AdjudicationSystem.txt", package = "Phenelope")
-  systemPrompt <- paste(readLines(systemPromptFile), collapse = "\n")
-
-  # promptTemplateFile <- "inst/prompts/Adjudication.txt"
-  promptTemplateFile <- system.file("prompts", "Adjudication.txt", package = "Phenelope")
-  promptTemplate <- paste(readLines(promptTemplateFile), collapse = "\n")
+adjudicate <- function(concepts,
+                       name,
+                       clinicalDefinition,
+                       batchSize,
+                       prompt,
+                       systemPrompt,
+                       llmClient,
+                       costTracker) {
 
   outputType <- ellmer::type_array(
     ellmer::type_object(
@@ -179,34 +261,45 @@ adjudicate <- function(concepts, name, clinicalDefinition, batchSize, llmClient,
     end <- min(start + batchSize - 1, nrow(concepts))
     message("  Adjudicating concepts ", start, " to ", end, " out of ", nrow(concepts))
     batch <- concepts[start:end, ]
-    prompt <- gsub("%name%", name, promptTemplate)
-    if (is.null(clinicalDefinition) || clinicalDefinition == "") {
-      # Delete entire line with %definition%
-      prompt <- gsub("\n[^\n]*%definition%[^\n]*\n", "", prompt)
-    } else {
-      prompt <- gsub("%definition%", clinicalDefinition, prompt)
-    }
-    json <- batch |>
-      select("conceptId", "conceptName") |>
-      jsonlite::toJSON(pretty = TRUE)
-    prompt <- gsub("%concepts%", json, prompt)
-
+    instantiatedPrompt <- instantiatePrompt(prompt = prompt,
+                                            name = name,
+                                            clinicalDefinition = clinicalDefinition,
+                                            concepts = batch)
+    instantiatedSystemPrompt <- instantiatePrompt(prompt = systemPrompt,
+                                                  name = name,
+                                                  clinicalDefinition = clinicalDefinition,
+                                                  concepts = batch)
     adjudicatedConcepts[[length(adjudicatedConcepts) + 1]] <- queryLlm(prompt = prompt,
                                                                        systemPrompt = systemPrompt,
                                                                        llmClient = llmClient,
-                                                                       costTracker,
+                                                                       costTracker = costTracker,
                                                                        outputType = outputType)
     start <- end + 1
   }
   adjudicatedConcepts <- bind_rows(adjudicatedConcepts)
 
   concepts <- concepts |>
-      suppressWarnings(select(-one_of("rationale"))) |>
-      inner_join(adjudicatedConcepts |>
-                   select("conceptId", "decision", "rationale"),
-                 by = join_by("conceptId")) |>
-      mutate(status = if_else(.data$decision == "KEEP", "APPROVED", "REJECTED")) |>
+    suppressWarnings(select(-one_of("rationale"))) |>
+    inner_join(adjudicatedConcepts |>
+                 select("conceptId", "decision", "rationale"),
+               by = join_by("conceptId")) |>
+    mutate(status = if_else(.data$decision == "KEEP", "APPROVED", "REJECTED")) |>
     select(-"decision")
 
   return(concepts)
+}
+
+instantiatePrompt <- function(prompt, name, clinicalDefinition, concepts) {
+  instantiatedPrompt <- gsub("%name%", name, prompt)
+  if (is.null(clinicalDefinition) || clinicalDefinition == "") {
+    # Delete entire line with %definition%
+    instantiatedPrompt <- gsub("\n[^\n]*%definition%[^\n]*\n", "", instantiatedPrompt)
+  } else {
+    instantiatedPrompt <- gsub("%definition%", clinicalDefinition, instantiatedPrompt)
+  }
+  json <- concepts |>
+    select("conceptId", "conceptName") |>
+    jsonlite::toJSON(pretty = TRUE)
+  instantiatedPrompt <- gsub("%concepts%", json, instantiatedPrompt)
+  return(instantiatedPrompt)
 }

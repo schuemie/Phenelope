@@ -20,7 +20,8 @@ conceptSet <- createConceptSet(
   clinicalDefinition = clinicalDefinition,
   llmClient = llmClient,
   connectionDetails = connectionDetails,
-  vocabDatabaseSchema = vocabDatabaseSchema
+  vocabDatabaseSchema = vocabDatabaseSchema,
+  cacheFolder = "cacheAlf"
 )
 
 

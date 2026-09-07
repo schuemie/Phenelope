@@ -14,7 +14,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-asConcepts <- function(dataFrame, status = NULL) {
+asConcepts <- function(dataFrame, origin = NULL, status = NULL) {
+  if (!is.null(origin)) {
+    dataFrame <- dataFrame |>
+      mutate(origin = !!origin)
+  }
   if (!is.null(status)) {
     dataFrame <- dataFrame |>
       mutate(status = !!status)
@@ -33,12 +37,16 @@ validateConcepts <- function(concepts) {
                                           "vocabularyId",
                                           "domainId",
                                           "conceptClassId",
+                                          "origin",
                                           "status"),
                          add = errorMessages)
-  checkmate::assertSubset(concepts$status,
+  checkmate::assertSubset(concepts$origin,
                           choices = c("SEED",
                                       "DESCENDANT",
-                                      "RECOMMENDED",
+                                      "RECOMMENDED"),
+                          add = errorMessages)
+  checkmate::assertSubset(concepts$status,
+                          choices = c("UNADJUDICATED",
                                       "APPROVED",
                                       "REJECTED"),
                           add = errorMessages)
@@ -59,4 +67,25 @@ asConceptSetExpression <- function(concepts, name, connection, vocabDatabaseSche
   conceptSet <- Capr::getConceptSetDetails(conceptSet, connection, vocabularyDatabaseSchema = vocabDatabaseSchema)
   return(conceptSet)
   # conceptSet <- jsonlite::fromJSON(Capr::as.json(conceptSet))
+}
+
+getConceptsFromIds <- function(conceptIds, origin = "SEED", status = "UNADJUDICATED", connection, vocabDatabaseSchema) {
+  sql <- "
+    SELECT concept_id,
+      concept_name,
+      vocabulary_id,
+      domain_id,
+      concept_class_id
+    FROM @cdm_database_schema.concept
+    WHERE concept_id IN (@concept_ids);
+  "
+  concepts <- DatabaseConnector::renderTranslateQuerySql(
+    connection = connection,
+    sql = sql,
+    cdm_database_schema = vocabDatabaseSchema,
+    concept_ids = conceptIds,
+    snakeCaseToCamelCase = TRUE
+  )
+  concepts <- asConcepts(concepts, origin = origin, status = status)
+  return(concepts)
 }

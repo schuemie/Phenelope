@@ -21,7 +21,8 @@ Imports:
     rlang,
     CirceR,
     checkmate,
-    R6
+    R6,
+    readr
 Suggests:
     knitr,
     rmarkdown,
@@ -44,3 +45,4 @@ URL: https://ohdsi.github.io/Phenelope, https://github.com/OHDSI/Phenelope
 BugReports: https://github.com/OHDSI/Phenelope/issues
 Encoding: UTF-8
 Config/roxygen2/version: 8.1.0
+Roxygen: list(markdown = TRUE)

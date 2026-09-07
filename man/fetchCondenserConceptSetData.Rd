@@ -16,13 +16,13 @@ fetchCondenserConceptSetData(
 \arguments{
 \item{conceptSetExpression}{The concept set expression to condense. This can
 be either a JSON expression or the output of
-`ROhdsiWebApi::getConceptSetDefinition`.}
+\code{ROhdsiWebApi::getConceptSetDefinition}.}
 
-\item{connectionDetails}{The output of `DatabaseConnector::createConnectionDetails()`.
-Is ignored if `connection` is provided.}
+\item{connectionDetails}{The output of \code{DatabaseConnector::createConnectionDetails()}.
+Is ignored if \code{connection} is provided.}
 
-\item{connection}{A `DatabaseConnector` connection. Can be NULL if
-`connectionDetails` is provided.}
+\item{connection}{A \code{DatabaseConnector} connection. Can be NULL if
+\code{connectionDetails} is provided.}
 
 \item{cdmDatabaseSchema}{A database schema holding the OHDSI Vocabulary
 tables.}
@@ -33,7 +33,7 @@ the user has write access.}
 \item{excludedVocabularies}{Vocabularies not to be included in the condensing function}
 }
 \value{
-A list containing the three inputs for `condenseConceptSet()`.
+A list containing the three inputs for \code{condenseConceptSet()}.
 }
 \description{
 Fetch data for concept set condensation

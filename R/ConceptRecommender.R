@@ -23,7 +23,7 @@ ConceptRecommender <- R6::R6Class(
     #' Recommend concepts
     #'
     #' @param conceptIds A set of concept IDs to find related concepts for.
-    #' @param domainSettings An object of type `DomainSettings` as created by `getDomainSettings()`.
+    #' @template DomainSettings
     #' @template Connection
     #' @template VocabDatabaseSchema
     #' @template ExcludedVocabularyIds
@@ -48,13 +48,12 @@ HecateConceptRecomender <- R6::R6Class(
     #' HecateConceptRecomender constructor
     #'
     #' @param minCount Minimum record count for concepts to be recommended.
-    #' @param excludedVocabularies      Character vector of OHDSI Vocabulary names to exclude.
     #'
     #' @returns
     #' An object of type `HecateConceptRecomender`.
     #'
     #' @export
-    initialize = function(minCount = 0, excludedVocabularies = c("ICDO3")) {
+    initialize = function(minCount = 0) {
       private$minCount <- minCount
     },
     #' @description
@@ -81,14 +80,7 @@ HecateConceptRecomender <- R6::R6Class(
                                                connection = connection,
                                                vocabDatabaseSchema = vocabDatabaseSchema)
       message("  - Found ", nrow(recommendations), " additional concepts through Phoebe recommendations")
-      concepts <- bind_rows(
-        descendants |>
-          mutate(status = "DESCENDANT"),
-        recommendations |>
-          select("conceptId", "conceptName", "domainId", "conceptClassId", "vocabularyId") |>
-          mutate(status = "RECOMMENDED")
-      ) |>
-        asConcepts()
+      concepts <- bind_rows(descendants, recommendations)
       return(concepts)
     }
   ),
@@ -135,13 +127,14 @@ getHecatePhoebeRecommendations <- function(conceptIds) {
 }
 
 filterRecommendations <- function(recommendations, domainSettings, excludedVocabularyIds, minCount, connection, vocabDatabaseSchema) {
-  conceptInformation <- getConceptInformation(conceptIds = unique(recommendations$conceptId),
-                                              connection = connection,
-                                              vocabDatabaseSchema = vocabDatabaseSchema)
-  recommendations <- recommendations |>
-    select("conceptId", "relationshipId", "recordCount") |>
-    inner_join(conceptInformation |>
-                 select("conceptId", "conceptName", "vocabularyId", "domainId", "conceptClassId"),
+  concepts <- getConceptsFromIds(conceptIds = unique(recommendations$conceptId),
+                                 origin = "RECOMMENDED",
+                                 status = "UNADJUDICATED",
+                                 connection = connection,
+                                 vocabDatabaseSchema = vocabDatabaseSchema)
+  recommendations <- concepts |>
+    inner_join(recommendations |>
+                 select("conceptId", "relationshipId", "recordCount"),
                by = join_by("conceptId"))
   if (!is.null(domainSettings$domainIds)) {
     recommendations <- recommendations |>
@@ -164,7 +157,7 @@ filterRecommendations <- function(recommendations, domainSettings, excludedVocab
       filter(.data$recordCount >= minCount)
   }
   recommendations <- recommendations |>
-    select("conceptId", "conceptName", "vocabularyId", "domainId", "conceptClassId") |>
+    select(-"relationshipId", -"recordCount") |>
     distinct()
   return(recommendations)
 }
@@ -195,5 +188,6 @@ getDescendants <- function(conceptIds, domainSettings, excludedVocabularyIds, co
     excluded_vocabulary_ids = paste(sprintf("'%s'", excludedVocabularyIds), collapse = ", "),
     snakeCaseToCamelCase = TRUE
   )
+  descendants <- asConcepts(descendants, origin = "DESCENDANT", status = "UNADJUDICATED")
   return(descendants)
 }

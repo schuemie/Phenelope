@@ -14,6 +14,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# source("R/HelperFunctions.R")
+
 #' Create a concept set
 #'
 #' @param name                      The name of the concept set to create. This should be an informative name reflecting
@@ -78,28 +80,45 @@ createConceptSet <- function(
   costTracker <- new.env()
   costTracker$amount <- 0
 
+  # Establish domain ---------------------------------------------------------------------------------------------------
   message("Determining concept set domain")
-  domain <- getDomain(name, llmClient, costTracker)
+  domain <- withCache({
+    getDomain(name, llmClient, costTracker)
+  },
+  cacheFolder = cacheFolder,
+  fileName = "Domain.txt"
+  )
   domainSettings <- getdomainSettings(domain)
   message("- Domain: ", domain)
 
+  # Seed concepts ------------------------------------------------------------------------------------------------------
   if (!is.null(seedConceptIds) && length(seedConceptIds) > 0) {
-    concepts <- getConceptInformation(conceptIds = seedConceptIds,
-                                      connection = connection,
-                                      vocabDatabaseSchema = vocabDatabaseSchema)
+    concepts <- withCache({
+      getConceptsFromIds(conceptIds = seedConceptIds,
+                         origin = "SEED",
+                         connection = connection,
+                         vocabDatabaseSchema = vocabDatabaseSchema)
+    },
+    cacheFolder = cacheFolder,
+    fileName = "SeedConcepts.csv"
+    )
   } else {
     message("Finding seed concepts")
-    concepts <- findSeedConcepts(name = name,
-                                 llmClient = llmClient,
-                                 costTracker = costTracker,
-                                 connection = connection,
-                                 vocabDatabaseSchema = vocabDatabaseSchema,
-                                 findSeedConceptSettings = findSeedConceptSettings,
-                                 domainIds = domainSettings$domainIds,
-                                 conceptClassIds = domainSettings$conceptClassIds)
+    concepts <- withCache({
+      findSeedConcepts(name = name,
+                       llmClient = llmClient,
+                       costTracker = costTracker,
+                       findSeedConceptSettings = findSeedConceptSettings,
+                       domainSettings = domainSettings,
+                       excludedVocabularyIds = excludedVocabularyIds)
+    },
+    cacheFolder = cacheFolder,
+    fileName = "SeedConcepts.csv"
+    )
     message("- Found total of ", nrow(concepts), " seed concept IDs")
   }
 
+  # Recommend - adjudicate iterations ----------------------------------------------------------------------------------
   for (iteration in 1:2) {
     message("Starting iteration ", iteration)
 
@@ -112,23 +131,33 @@ createConceptSet <- function(
         filter(.data$status %in% c("APPROVED")) |>
         pull(.data$conceptId)
     }
-    recommendedConcepts <- conceptRecommender$recommendConcepts(conceptIds = conceptIds,
-                                                                domainSettings = domainSettings,
-                                                                excludedVocabularyIds = excludedVocabularyIds,
-                                                                connection = connection,
-                                                                vocabDatabaseSchema = vocabDatabaseSchema)
-    recommendedConcepts <- recommendedConcepts |>
-      filter(!.data$conceptId %in% concepts$conceptId)
+    recommendedConcepts <- withCache({
+      recommendedConcepts <- conceptRecommender$recommendConcepts(conceptIds = conceptIds,
+                                                                  domainSettings = domainSettings,
+                                                                  excludedVocabularyIds = excludedVocabularyIds,
+                                                                  connection = connection,
+                                                                  vocabDatabaseSchema = vocabDatabaseSchema)
+      recommendedConcepts |>
+        filter(!.data$conceptId %in% concepts$conceptId)
+    },
+    cacheFolder = cacheFolder,
+    fileName = sprintf("RecommendConcepts_%d.csv", iteration)
+    )
     concepts <- concepts |>
       bind_rows(recommendedConcepts)
     message("- ", nrow(recommendedConcepts), " concepts added by recommender")
 
     message("Adjudicating recommendations")
     conceptsToAdjudicate <- concepts |>
-      filter(.data$status %in% c("SEED", "DESCENDANT", "RECOMMENDED"))
-    adjudicatedConcepts <- conceptAdjudicator$adjudicateConcepts(concepts = conceptsToAdjudicate,
-                                                                 llmClient = llmClient,
-                                                                 costTracker = costTracker)
+      filter(.data$status == "UNADJUDICATED")
+    adjudicatedConcepts <- withCache({
+      conceptAdjudicator$adjudicateConcepts(concepts = conceptsToAdjudicate,
+                                            llmClient = llmClient,
+                                            costTracker = costTracker)
+    },
+    cacheFolder = cacheFolder,
+    fileName = sprintf("AdjudicatedConcepts_%d.csv", iteration)
+    )
     message("- Approved ", sum(adjudicatedConcepts$status == "APPROVED"), " of ", nrow(adjudicatedConcepts), " new concepts")
 
     concepts <- concepts |>
@@ -136,6 +165,7 @@ createConceptSet <- function(
       bind_rows(adjudicatedConcepts)
   }
 
+  # Convert to (condensed) concept set expression ----------------------------------------------------------------------
   conceptSetExpression <- asConceptSetExpression(concepts = concepts,
                                                  name = name,
                                                  connection = connection,
@@ -148,90 +178,10 @@ createConceptSet <- function(
                                        tempEmulationSchema = tempEmulationSchema,
                                        excludedVocabularyIds = excludedVocabularyIds)
   }
+
   delta <- Sys.time() - start
   message("Creating concept set took ", signif(delta, 3), " ", attr(delta, "units"), " and cost $", costTracker$amount, ".")
   return(conceptSetExpression)
-}
-
-getDomain <- function(name, llmClient, costTracker) {
-  prompt <- "
-    Determine what domain category, DRUG, CONDITION, PROCEDURE, MEASUREMENT, VISIT, or DEVICE, the following term belongs to: %name%
-
-    Output JSON only, using the following format:
-    {
-      \"domain\": \"Domain name\"
-    }
-  "
-  prompt <- gsub("%name%", name, prompt)
-  outputType <- ellmer::type_object(
-    domain = ellmer::type_enum(values = c("DRUG","CONDITION","PROCEDURE","VISIT","DEVICE", "MEASUREMENT"))
-  )
-  domain <- queryLlm(prompt,
-                     llmClient = llmClient,
-                     costTracker = costTracker,
-                     outputType = outputType)
-  domain <- domain$domain
-  return(domain)
-}
-
-#' Get the settings for a specific domain.
-#'
-#' @param domain The name of a domain (all caps), e.g. 'CONDITION'.
-#'
-#' @returns
-#' An object of type `DomainSettings`.
-#'
-#' @export
-getdomainSettings <- function(domain) {
-  errorMessages <- checkmate::makeAssertCollection()
-  checkmate::assertCharacter(domain, len = 1, add = errorMessages)
-  checkmate::assertChoice(domain, choices = c("CONDITION",
-                                              "PROCEDURE",
-                                              "MEASUREMENT",
-                                              "VISIT",
-                                              "DEVICE",
-                                              "DRUG"), add = errorMessages)
-  checkmate::reportAssertions(collection = errorMessages)
-  if (domain == "CONDITION") {
-    domainSettings <- list(
-      domainIds = c("Condition", "Observation"),
-      conceptClassIds = c("Disorder", "HCPCS", 	"Clinical Observation", "Clinical Finding"),
-      phoebeExclusions = c(),
-      vectorSearchSize = 25
-    )
-  } else if (domain == "PROCEDURE") {
-    domainSettings <- list(
-      domainIds = c("Procedure","Device", "Observation"),
-      conceptClassIds = c("Procedure", "CPT4", "Clinical Observation"),
-      phoebeExclusions = c("Ontology-parent"),
-      vectorSearchSize = 200
-    )
-  } else if (domain == "MEASUREMENT") {
-    domainSettings <- list(
-      domainIds = c("Measurement", "Observation"),
-      conceptClassIds = c("CPT4", "Clinical Observation", "Procedure", "Lab Test"),
-      phoebeExclusions = c("Ontology-parent"),
-      vectorSearchSize = 200
-    )
-  } else if (domain == "VISIT") {
-    domainSettings <- list(
-      domainIds = c("Visit", "Provider", "Procedure", "Observation"),
-      conceptClassIds = c("Visit"),
-      phoebeExclusions = c("Ontology-parent"),
-      vectorSearchSize = 200
-    )
-  } else if (domain == "DEVICE") {
-    domainSettings <- list(
-      domainIds = c("Procedure", "Device", "Observation"),
-      conceptClassIds = c("Physical Object"),
-      phoebeExclusions = c("Ontology-parent"),
-      vectorSearchSize = 200
-    )
-  } else if (domain == "DRUG") {
-    stop("The DRUG domain is currently not supported")
-  }
-  class(domainSettings) <- "DomainSettings"
-  return(domainSettings)
 }
 
 doCondense <- function(conceptSetExpression, connection, vocabDatabaseSchema, tempEmulationSchema, excludedVocabularyIds) {

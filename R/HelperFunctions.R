@@ -65,23 +65,31 @@ queryLlm <- function(prompt,
   return(response)
 }
 
-getConceptInformation <- function(conceptIds, connection, vocabDatabaseSchema) {
-  sql <- "
-    SELECT concept_id,
-      concept_name,
-      vocabulary_id,
-      domain_id,
-      concept_class_id
-    FROM @cdm_database_schema.concept
-    WHERE concept_id IN (@concept_ids);
-  "
-  concepts <- DatabaseConnector::renderTranslateQuerySql(
-    connection = connection,
-    sql = sql,
-    cdm_database_schema = vocabDatabaseSchema,
-    concept_ids = conceptIds,
-    snakeCaseToCamelCase = TRUE
-  )
-  return(concepts)
+withCache <- function(expression, cacheFolder, fileName) {
+  if (!is.null(cacheFolder)) {
+    ext <- tolower(tools::file_ext(fileName))
+
+    if (file.exists(file.path(cacheFolder, fileName))) {
+      result <- switch(ext,
+                       "rds" = readRDS(file.path(cacheFolder, fileName)),
+                       "csv" = readr::read_csv(file.path(cacheFolder, fileName)),
+                       "txt" = readLines(file.path(cacheFolder, fileName)))
+      if (ext == "csv" && "origin" %in% colnames(result) && "status" %in% colnames(result)) {
+        result <- asConcepts(result)
+      }
+      return(result)
+    }
+  }
+  result <- expression
+
+  if (!is.null(cacheFolder)) {
+    switch(ext,
+           "rds" = saveRDS(result, file = file.path(cacheFolder, fileName)),
+           "csv" = readr::write_csv(result, file.path(cacheFolder, fileName)),
+           "txt" = writeLines(as.character(result), con = file.path(cacheFolder, fileName)))
+  }
+  return(result)
 }
+
+
 

@@ -50,8 +50,8 @@ createFindSeedConceptSettings <- function(addSynonyms = FALSE,
 #' @template LlmClient
 #' @template CostTracker
 #' @param findSeedConceptSettings A setting object as created by `createFindSeedConceptSettings()`.
-#' @param domainIds               Optional: A character vector of domain IDs to restrict to.
-#' @param conceptClassIds         Optional: A character vector of concept class IDs to restrict to.
+#' @template DomainSettings
+#' @template ExcludedVocabularyIds
 #'
 #' @description
 #' The `llmClient` is only used when `addSynonyms` is `TRUE` in the settings.#'
@@ -64,8 +64,8 @@ findSeedConcepts <- function(name,
                              llmClient = NULL,
                              costTracker = NULL,
                              findSeedConceptSettings = createFindSeedConceptSettings(),
-                             domainIds = NULL,
-                             conceptClassIds = NULL) {
+                             domainSettings = NULL,
+                             excludedVocabularyIds = NULL) {
   errorMessages <- checkmate::makeAssertCollection()
   checkmate::assertCharacter(name, len = 1, add = errorMessages)
   checkmate::assertR6(llmClient, "Chat", null.ok = TRUE, add = errorMessages)
@@ -84,8 +84,8 @@ findSeedConcepts <- function(name,
   for (i in seq_along(names)) {
     searchResults[[i]] <- searchConcepts(
       term = names[i],
-      domainIds = domainIds,
-      conceptClassIds = conceptClassIds,
+      domainSettings = domainSettings,
+      excludedVocabularyIds = excludedVocabularyIds,
       maxN = findSeedConceptSettings$maxN,
       fuzzyVocabSearchType = findSeedConceptSettings$fuzzyVocabSearchType
     ) |>
@@ -96,7 +96,7 @@ findSeedConcepts <- function(name,
     slice_head(n = findSeedConceptSettings$maxN)
   message("  - Found ", nrow(seedConcepts), " seed concepts through fuzzy vocab search")
 
-  concepts <- asConcepts(seedConcepts, status = "SEED")
+  concepts <- asConcepts(seedConcepts, origin = "SEED", status = "UNADJUDICATED")
   return(concepts)
 }
 

@@ -14,12 +14,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-searchConcepts = function(term, domainIds = NULL, conceptClassIds = NULL, maxN = 10, fuzzyVocabSearchType) {
+searchConcepts = function(term, domainSettings, excludedVocabularyIds, maxN = 10, fuzzyVocabSearchType) {
   if (fuzzyVocabSearchType == "HECATE") {
     searchResults <- searchConceptsHecate(
       term = term,
-      domainIds = domainIds,
-      conceptClassIds = conceptClassIds,
+      domainSettings = domainSettings,
+      excludedVocabularyIds = excludedVocabularyIds,
       maxN = maxN
     )
   } else {
@@ -29,18 +29,19 @@ searchConcepts = function(term, domainIds = NULL, conceptClassIds = NULL, maxN =
 
 }
 
-searchConceptsHecate = function(term, domainIds = NULL, conceptClassIds = NULL, maxN = 10) {
+searchConceptsHecate = function(term, domainSettings, excludedVocabularyIds, maxN = 10) {
   maxRetries <- 10
   waitTime <- 3
   params <- list(
     q = term,
     limit = maxN
   )
-  if (!is.null(domainIds)) {
-    params$domain_id <- paste(domainIds, collapse = ",")
+  if (!is.null(domainSettings)) {
+    params$domain_id <- paste(domainSettings$domainIds, collapse = ",")
+    params$concept_class_id <- paste(domainSettings$conceptClassIds, collapse = ",")
   }
-  if (!is.null(conceptClassIds)) {
-    params$concept_class_id <- paste(conceptClassIds, collapse = ",")
+  if (!is.null(excludedVocabularyIds)) {
+    params$exclude_vocabulary_id <- paste(excludedVocabularyIds, collapse = ",")
   }
   url <- "https://hecate.pantheon-hds.com/api/search_standard"
 
