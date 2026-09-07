@@ -28,13 +28,15 @@
 createFindSeedConceptSettings <- function(addSynonyms = FALSE,
                                           maxN = 25,
                                           minCount = 0,
-                                          fuzzyVocabSearchType = "HECATE") {
+                                          fuzzyVocabSearchType = "HECATE",
+                                          adjudicateFuzzySearchResults = TRUE) {
   errorMessages <- checkmate::makeAssertCollection()
   checkmate::assertLogical(addSynonyms, len = 1, add = errorMessages)
   checkmate::assertIntegerish(maxN, len = 1, lower = 1, add = errorMessages)
   checkmate::assertIntegerish(minCount, len = 1, lower = 0, add = errorMessages)
   checkmate::assertCharacter(fuzzyVocabSearchType, len = 1, add = errorMessages)
   checkmate::assertChoice(fuzzyVocabSearchType, choices = c("HECATE"), add = errorMessages)
+  checkmate::assertLogical(adjudicateFuzzySearchResults, len = 1, add = errorMessages)
   checkmate::reportAssertions(collection = errorMessages)
   return(
     structure(
@@ -47,6 +49,7 @@ createFindSeedConceptSettings <- function(addSynonyms = FALSE,
 #' Find seed concepts
 #'
 #' @param name                    The name to use to find concepts.
+#' @template ClinicalDefinition
 #' @template LlmClient
 #' @template CostTracker
 #' @param findSeedConceptSettings A setting object as created by `createFindSeedConceptSettings()`.
@@ -61,6 +64,7 @@ createFindSeedConceptSettings <- function(addSynonyms = FALSE,
 #'
 #' @export
 findSeedConcepts <- function(name,
+                             clinicalDefinition = NULL,
                              llmClient = NULL,
                              costTracker = NULL,
                              findSeedConceptSettings = createFindSeedConceptSettings(),
@@ -95,6 +99,14 @@ findSeedConcepts <- function(name,
   seedConcepts <- searchResults |>
     slice_head(n = findSeedConceptSettings$maxN)
   message("  - Found ", nrow(seedConcepts), " seed concepts through fuzzy vocab search")
+
+  if (findSeedConceptSettings$adjudicateFuzzySearchResults) {
+    message("  Adjudicating fuzzy vocab search results")
+    seedConcepts = adjudicateSeedConcepts(seedConcepts,
+                                          llmClient = llmClient,
+                                          costTracker = costTracker)
+    message("  - Kept ", nrow(seedConcepts), " seed concepts")
+  }
 
   concepts <- asConcepts(seedConcepts, origin = "SEED", status = "UNADJUDICATED")
   return(concepts)
@@ -135,5 +147,38 @@ mergeRankings <- function(searchResults) {
     arrange(desc(.data$totalScore), .data$avgerageRank) |>
     select("conceptId", "conceptName", "vocabularyId","domainId", "conceptClassId")
   return(overallRanking)
+}
+
+adjudicateSeedConcepts <- function(concepts,
+                                   name = name,
+                                   llmClient,
+                                   costTracker) {
+  # promptFile <- "inst/prompts/SeedAdjudication.txt"
+  promptFile <- system.file("prompts", "SeedAdjudication.txt", package = "Phenelope")
+  prompt <- paste(readLines(promptFile), collapse = "\n")
+  # systemPromptFile <- "inst/prompts/SeedAdjudicationSystem.txt"
+  systemPromptFile <- system.file("prompts", "SeedAdjudicationSystem.txt", package = "Phenelope")
+  systemPrompt <- paste(readLines(systemPromptFile), collapse = "\n")
+  instantiatedPrompt <- instantiatePrompt(prompt = prompt,
+                                          name = name,
+                                          clinicalDefinition = clinicalDefinition,
+                                          concepts = batch)
+  instantiatedSystemPrompt <- instantiatePrompt(prompt = systemPrompt,
+                                                name = name,
+                                                clinicalDefinition = clinicalDefinition,
+                                                concepts = concepts)
+  outputType <- ellmer::type_array(
+    ellmer::type_object(
+      conceptId = ellmer::type_integer()
+    )
+  )
+  conceptsToRemove <- queryLlm(prompt = instantiatedPrompt,
+                               systemPrompt = instantiatedSystemPrompt,
+                               llmClient = llmClient,
+                               costTracker = costTracker,
+                               outputType = outputType)
+  concepts <- concept |>
+    filter(!.data$conceptId %in% conceptsToRemove$conceptId)
+  return(concepts)
 }
 

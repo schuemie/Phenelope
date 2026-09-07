@@ -8,7 +8,8 @@ createFindSeedConceptSettings(
   addSynonyms = FALSE,
   maxN = 25,
   minCount = 0,
-  fuzzyVocabSearchType = "HECATE"
+  fuzzyVocabSearchType = "HECATE",
+  adjudicateFuzzySearchResults = TRUE
 )
 }
 \arguments{

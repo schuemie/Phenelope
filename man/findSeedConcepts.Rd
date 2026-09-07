@@ -6,6 +6,7 @@
 \usage{
 findSeedConcepts(
   name,
+  clinicalDefinition = NULL,
   llmClient = NULL,
   costTracker = NULL,
   findSeedConceptSettings = createFindSeedConceptSettings(),
@@ -15,6 +16,8 @@ findSeedConcepts(
 }
 \arguments{
 \item{name}{The name to use to find concepts.}
+
+\item{clinicalDefinition}{Optional: a clinical definition of the concept set target.}
 
 \item{llmClient}{An \code{ellmer} chat object to connect to a large language model, as created for example using
 \code{ellmer::chat_ollama()}.}
