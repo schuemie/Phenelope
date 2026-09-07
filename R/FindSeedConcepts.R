@@ -103,6 +103,8 @@ findSeedConcepts <- function(name,
   if (findSeedConceptSettings$adjudicateFuzzySearchResults) {
     message("  Adjudicating fuzzy vocab search results")
     seedConcepts = adjudicateSeedConcepts(seedConcepts,
+                                          name = name,
+                                          clinicalDefinition = clinicalDefinition,
                                           llmClient = llmClient,
                                           costTracker = costTracker)
     message("  - Kept ", nrow(seedConcepts), " seed concepts")
@@ -150,7 +152,8 @@ mergeRankings <- function(searchResults) {
 }
 
 adjudicateSeedConcepts <- function(concepts,
-                                   name = name,
+                                   name,
+                                   clinicalDefinition,
                                    llmClient,
                                    costTracker) {
   # promptFile <- "inst/prompts/SeedAdjudication.txt"
@@ -162,7 +165,7 @@ adjudicateSeedConcepts <- function(concepts,
   instantiatedPrompt <- instantiatePrompt(prompt = prompt,
                                           name = name,
                                           clinicalDefinition = clinicalDefinition,
-                                          concepts = batch)
+                                          concepts = concepts)
   instantiatedSystemPrompt <- instantiatePrompt(prompt = systemPrompt,
                                                 name = name,
                                                 clinicalDefinition = clinicalDefinition,
@@ -177,7 +180,7 @@ adjudicateSeedConcepts <- function(concepts,
                                llmClient = llmClient,
                                costTracker = costTracker,
                                outputType = outputType)
-  concepts <- concept |>
+  concepts <- concepts |>
     filter(!.data$conceptId %in% conceptsToRemove$conceptId)
   return(concepts)
 }

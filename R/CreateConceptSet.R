@@ -106,6 +106,7 @@ createConceptSet <- function(
     message("Finding seed concepts")
     concepts <- withCache({
       findSeedConcepts(name = name,
+                       clinicalDefinition = clinicalDefinition,
                        llmClient = llmClient,
                        costTracker = costTracker,
                        findSeedConceptSettings = findSeedConceptSettings,

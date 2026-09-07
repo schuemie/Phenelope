@@ -24,10 +24,9 @@ queryLlm <- function(prompt,
 
   maxRetries <- 10
   attempt <- 0
-  success <- FALSE
-  while (attempt <= maxRetries && !success) {
+  while (attempt <= maxRetries) {
     tryCatch({
-      attempt <- attempt + 1  # Increment the attempt count
+      attempt <- attempt + 1
       llmClient$set_turns(list())
 
       if (is.null(outputType)) {
@@ -43,7 +42,9 @@ queryLlm <- function(prompt,
           response <- llmClient$chat_structured(prompt, echo = "none", type = outputType)
         }
       }
-      success <- TRUE
+      if (!is.null(costTracker)) {
+        costTracker$amount <- costTracker$amount + llmClient$get_cost()
+      }
       return(response)
     },
     error = function(e) {
@@ -59,10 +60,6 @@ queryLlm <- function(prompt,
       }
     })
   }
-  if (!is.null(costTracker)) {
-    costTracker$amount <- costTracker$amount + llmClient$get_cost()
-  }
-  return(response)
 }
 
 withCache <- function(expression, cacheFolder, fileName) {
