@@ -54,7 +54,7 @@ getDomain <- function(name, llmClient, costTracker = NULL) {
 #' An object of type `DomainSettings`.
 #'
 #' @export
-getdomainSettings <- function(domain) {
+getDomainSettings <- function(domain) {
   errorMessages <- checkmate::makeAssertCollection()
   checkmate::assertCharacter(domain, len = 1, add = errorMessages)
   checkmate::assertChoice(domain, choices = c("CONDITION",

@@ -28,6 +28,6 @@ conceptSet <- createConceptSet(
 # Test recommender separately:
 conceptRecommender <- HecateConceptRecomender$new(minCount = 0)
 newConcepts <- conceptRecommender$recommendConcepts(conceptIds = conceptIds,
-                                                    domainSettings = getdomainSettings("CONDITION"),
+                                                    domainSettings = getDomainSettings("CONDITION"),
                                                     connection = connection,
                                                     vocabDatabaseSchema = vocabDatabaseSchema)

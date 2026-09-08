@@ -14,6 +14,43 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+#' Convert data frame to Concepts
+#'
+#' @param dataFrame Input data frame
+#' @param origin    Optional: the origin to use for all concepts in the input. Can be 'SEED', 'DESCENDANT', or
+#'                  'RECOMMENDED'.
+#' @param status    Optional: the status to use for all concepts in the input. Can be 'UNADJUDICATED', 'APPROVED', or
+#'                  'REJECTED'
+#'
+#' @description
+#' The `Concepts` class enforces several properties of a data frame. First of all, it *must* have columns:
+#'
+#' - conceptId
+#' - conceptName
+#' - vocabularyId
+#' - domainId
+#' - conceptClassId
+#' - origin
+#' - status
+#'
+#' Second, the `origin` column *must* be one of these values:
+#'
+#' - SEED
+#' - DESCENDANT
+#' - RECOMMENDED
+#'
+#' Third, the `status` column *must* be one of these values:
+#'
+#' - UNADJUDICATED
+#' - APPROVED
+#' - REJECTED
+#'
+#' Finally, the `conceptId` column cannot have duplicates.
+#'
+#' @returns
+#' An object of type `Concepts`.
+#'
+#' @export
 asConcepts <- function(dataFrame, origin = NULL, status = NULL) {
   if (!is.null(origin)) {
     dataFrame <- dataFrame |>

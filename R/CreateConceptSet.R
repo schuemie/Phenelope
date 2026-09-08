@@ -88,7 +88,7 @@ createConceptSet <- function(
   cacheFolder = cacheFolder,
   fileName = "Domain.txt"
   )
-  domainSettings <- getdomainSettings(domain)
+  domainSettings <- getDomainSettings(domain)
   message("- Domain: ", domain)
 
   # Seed concepts ------------------------------------------------------------------------------------------------------

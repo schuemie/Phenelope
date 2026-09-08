@@ -20,6 +20,9 @@ createFindSeedConceptSettings(
 \item{minCount}{Minimum number of record counts for a concept to be included.}
 
 \item{fuzzyVocabSearchType}{Type of fuzzy vocabulary search. Currently only 'HECATE' is supported.}
+
+\item{adjudicateFuzzySearchResults}{Perform a first pass adjudication on the fuzzy vocabulary search results to
+remove concepts that are obviously wrong?}
 }
 \value{
 A settings object.

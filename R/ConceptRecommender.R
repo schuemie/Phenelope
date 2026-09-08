@@ -157,8 +157,8 @@ filterRecommendations <- function(recommendations,
                by = join_by("conceptId"))
   if (!is.null(domainSettings)) {
     recommendations <- recommendations |>
-      filter(!.data$domainId %in% domainSettings$domainId,
-             !.data$conceptClassId %in% domainSettings$conceptClassIds)
+      filter(.data$domainId %in% domainSettings$domainId,
+             .data$conceptClassId %in% domainSettings$conceptClassIds)
     if (!is.null(domainSettings$phoebeExclusions)) {
       recommendations <- recommendations |>
         filter(!.data$relationshipId %in% domainSettings$phoebeExclusions)

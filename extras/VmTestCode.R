@@ -29,20 +29,3 @@ conceptSet <- createConceptSet(
   vocabDatabaseSchema = cdmDatabaseSchema,
   cacheFolder = "cacheAlf"
 )
-
-connection <- DatabaseConnector::connect(connectionDetails)
-
-name = "Capillaroscopy"
-domain <- Phenelope:::getDomain(name, llmClientO3)
-domainSettings = getdomainSettings(domain)
-
-seedConcepts <- findSeedConcepts(
-  name = name,
-  domainIds = domainSettings$domainIds,
-  conceptClassIds = domainSettings$conceptClassIds
-)
-conceptRecommender <- HecateConceptRecomender$new()
-recommendedConcepts <- conceptRecommender$recommendConcepts(conceptIds = seedConcepts$conceptId,
-                                                            domainSettings = domainSettings,
-                                                            connection = connection,
-                                                            vocabDatabaseSchema = vocabDatabaseSchema)
