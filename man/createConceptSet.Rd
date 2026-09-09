@@ -14,7 +14,7 @@ createConceptSet(
   tempEmulationSchema = getOption("sqlRenderTempEmulationSchema"),
   cacheFolder = NULL,
   excludedVocabularyIds = c("ICDO3"),
-  findSeedConceptSettings = createFindSeedConceptSettings(),
+  seedConceptFinder = DefaultSeedConceptFinder$new(),
   conceptRecommender = HecateConceptRecomender$new(),
   conceptAdjudicator = DefaultConceptAdjudicator$new(),
   condenseConceptSet = TRUE
@@ -43,8 +43,7 @@ the user has write access.}
 
 \item{excludedVocabularyIds}{Character vector of OHDSI Vocabulary names to exclude.}
 
-\item{findSeedConceptSettings}{A settings object for finding seed concepts (when not provided in \code{seedConceptIds})
-as created using \code{createFindSeedConceptSettings()}.}
+\item{seedConceptFinder}{An object of class \code{SeedConceptFinder} for finding seed concepts when not provided.}
 
 \item{conceptRecommender}{An object of class \code{ConceptRecommender} for recommending additional concepts.}
 

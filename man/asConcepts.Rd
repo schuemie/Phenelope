@@ -46,3 +46,6 @@ Third, the \code{status} column \emph{must} be one of these values:
 
 Finally, the \code{conceptId} column cannot have duplicates.
 }
+\seealso{
+\code{\link[=validateConcepts]{validateConcepts()}}
+}

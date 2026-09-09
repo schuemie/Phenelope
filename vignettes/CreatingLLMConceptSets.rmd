@@ -87,12 +87,12 @@ Once you have the necessary information, you are ready to create you concept set
 ```{r tidy=FALSE,eval=FALSE}
 # run the
 finalSet <- Penelope::createConceptSet(
-  conceptSetTarget = "Type 2 Diabetes Mellitus",
-  originalConceptList = c(201826),
+  name = "Type 2 Diabetes Mellitus",
+  seedconceptIds = c(201826),
   llmClient = llmClient,
   connectionDetails = connectionDetails,
-  cdmDatabaseSchema = "yourCDMSchema",
-  outputDirectory = "c:/llmConceptSets/type2Dm"
+  vocabDatabaseSchema = "yourCDMSchema",
+  cacheFolder = "c:/llmConceptSets/type2Dm"
 )
 ```
 

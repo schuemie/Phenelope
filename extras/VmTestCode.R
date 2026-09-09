@@ -29,3 +29,24 @@ conceptSet <- createConceptSet(
   vocabDatabaseSchema = cdmDatabaseSchema,
   cacheFolder = "cacheAlf"
 )
+writeLines(conceptSet)
+
+# Using mincount and no cache folder:
+conceptSet <- createConceptSet(
+  name = targetName,
+  clinicalDefinition = targetClinicalDefinition,
+  llmClient = llmClientO3,
+  connectionDetails = cd,
+  vocabDatabaseSchema = cdmDatabaseSchema,
+  seedConceptFinder = DefaultSeedConceptFinder$new(minCount = 100),
+  conceptRecommender = HecateConceptRecomender$new(minCount = 100)
+)
+
+# Procedure, no clinical definition and no cache folder:
+conceptSet <- createConceptSet(
+  name = "Appendectomy",
+  llmClient = llmClientO3,
+  connectionDetails = cd,
+  vocabDatabaseSchema = cdmDatabaseSchema
+)
+writeLines(conceptSet)

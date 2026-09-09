@@ -26,21 +26,12 @@ Imports:
 Suggests:
     knitr,
     rmarkdown,
-    shiny,
-    shinydashboard,
-    DT,
-    htmltools,
-    qpdf,
     testthat,
-    Eunomia,
-    CohortGenerator,
     withr,
     keyring
 Remotes:
-    ohdsi/ROhdsiWebApi,
     ohdsi/Capr,
-    ohdsi/CirceR,
-    ohdsi/CohortGenerator
+    ohdsi/CirceR
 URL: https://ohdsi.github.io/Phenelope, https://github.com/OHDSI/Phenelope
 BugReports: https://github.com/OHDSI/Phenelope/issues
 Encoding: UTF-8

@@ -47,6 +47,8 @@
 #'
 #' Finally, the `conceptId` column cannot have duplicates.
 #'
+#' @seealso [validateConcepts()]
+#'
 #' @returns
 #' An object of type `Concepts`.
 #'
@@ -73,6 +75,17 @@ asConcepts <- function(dataFrame, origin = NULL, status = NULL) {
   return(dataFrame)
 }
 
+#' Validate a Concepts object
+#'
+#' @param concepts An object of type 'Concepts'.
+#'
+#' @description
+#' Throws an error if the object is not a valid `Concepts` object.
+#'
+#' @seealso [asConcepts()]
+#'
+#' @returns
+#' Returns nothing. Is called for the side effect of not throwing an error.
 validateConcepts <- function(concepts) {
   errorMessages <- checkmate::makeAssertCollection()
   checkmate::assertClass(concepts, "Concepts", add = errorMessages)
@@ -122,7 +135,8 @@ getConceptsFromIds <- function(conceptIds, origin = "SEED", status = "UNADJUDICA
       domain_id,
       concept_class_id
     FROM @cdm_database_schema.concept
-    WHERE concept_id IN (@concept_ids);
+    WHERE concept_id IN (@concept_ids)
+      AND invalid_reason IS NULL;
   "
   concepts <- DatabaseConnector::renderTranslateQuerySql(
     connection = connection,

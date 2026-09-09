@@ -38,7 +38,6 @@ searchConceptsHecate = function(term, domainSettings, excludedVocabularyIds, max
   )
   if (!is.null(domainSettings)) {
     params$domain_id <- paste(domainSettings$domainIds, collapse = ",")
-    params$concept_class_id <- paste(domainSettings$conceptClassIds, collapse = ",")
   }
   if (!is.null(excludedVocabularyIds)) {
     params$exclude_vocabulary_id <- paste(excludedVocabularyIds, collapse = ",")

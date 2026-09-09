@@ -50,6 +50,8 @@ getDomain <- function(name, llmClient, costTracker = NULL) {
 #'
 #' @param domain The name of a domain (all caps), e.g. 'CONDITION'.
 #'
+#' @seealso [getDomain()]
+#'
 #' @returns
 #' An object of type `DomainSettings`.
 #'
@@ -67,37 +69,27 @@ getDomainSettings <- function(domain) {
   if (domain == "CONDITION") {
     domainSettings <- list(
       domainIds = c("Condition", "Observation"),
-      conceptClassIds = c("Disorder", "HCPCS", 	"Clinical Observation", "Clinical Finding"),
-      phoebeExclusions = c(),
-      vectorSearchSize = 25
+      phoebeExclusions = c()
     )
   } else if (domain == "PROCEDURE") {
     domainSettings <- list(
       domainIds = c("Procedure","Device", "Observation"),
-      conceptClassIds = c("Procedure", "CPT4", "Clinical Observation"),
-      phoebeExclusions = c("Ontology-parent"),
-      vectorSearchSize = 200
+      phoebeExclusions = c("Ontology-parent")
     )
   } else if (domain == "MEASUREMENT") {
     domainSettings <- list(
       domainIds = c("Measurement", "Observation"),
-      conceptClassIds = c("CPT4", "Clinical Observation", "Procedure", "Lab Test"),
-      phoebeExclusions = c("Ontology-parent"),
-      vectorSearchSize = 200
+      phoebeExclusions = c("Ontology-parent")
     )
   } else if (domain == "VISIT") {
     domainSettings <- list(
       domainIds = c("Visit", "Provider", "Procedure", "Observation"),
-      conceptClassIds = c("Visit"),
-      phoebeExclusions = c("Ontology-parent"),
-      vectorSearchSize = 200
+      phoebeExclusions = c("Ontology-parent")
     )
   } else if (domain == "DEVICE") {
     domainSettings <- list(
       domainIds = c("Procedure", "Device", "Observation"),
-      conceptClassIds = c("Physical Object"),
-      phoebeExclusions = c("Ontology-parent"),
-      vectorSearchSize = 200
+      phoebeExclusions = c("Ontology-parent")
     )
   } else if (domain == "DRUG") {
     stop("The DRUG domain is currently not supported")

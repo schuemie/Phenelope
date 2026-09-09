@@ -15,3 +15,6 @@ An object of type \code{DomainSettings}.
 \description{
 Get the settings for a specific domain.
 }
+\seealso{
+\code{\link[=getDomain]{getDomain()}}
+}

@@ -79,22 +79,48 @@ HecateConceptRecomender <- R6::R6Class(
                                     connection = connection,
                                     vocabDatabaseSchema = vocabDatabaseSchema)
       descendants <- descendants |>
+        removeGenericConcepts() |>
         filter(!.data$conceptId %in% conceptIds)
+      if (private$minCount > 0) {
+        descendants <- descendants |>
+          addHecateRecordCounts() |>
+          filter(.data$recordCount > private$minCount) |>
+          select(-"recordCount")
+      }
       message("  - Found ", nrow(descendants), " additional concepts through descendants")
 
       message("  Getting Phoebe recommendations")
       recommendations <- getHecatePhoebeRecommendations(c(conceptIds, descendants$conceptId))
+      if (!is.null(domainSettings) && !is.null(domainSettings$phoebeExclusions)) {
+        recommendations <- recommendations |>
+          filter(!.data$relationshipId %in% domainSettings$phoebeExclusions)
+      }
+      if (private$minCount > 0) {
+        recommendations <- recommendations |>
+          filter(.data$recordCount >= private$minCount)
+      }
+      # Concept information (domain, valid) in Hecate may be outdated, so fetch from vocab server:
+      recommendations <- getConceptsFromIds(
+        conceptIds = recommendations$conceptId,
+        origin = "RECOMMENDED",
+        status = "UNADJUDICATED",
+        connection = connection,
+        vocabDatabaseSchema = vocabDatabaseSchema)
+
+      if (!is.null(domainSettings)) {
+        recommendations <- recommendations |>
+          filter(.data$domainId %in% domainSettings$domainId)
+      }
+      if (!is.null(excludedVocabularyIds)) {
+        recommendations <- recommendations |>
+          filter(!.data$vocabularyId %in% excludedVocabularyIds)
+      }
       recommendations <- recommendations |>
+        removeGenericConcepts() |>
         filter(!.data$conceptId %in% c(conceptIds, descendants$conceptId))
-      # Note: filterRecommendations returns an object of type Concepts:
-      recommendations <- filterRecommendations(recommendations = recommendations,
-                                               domainSettings = domainSettings,
-                                               excludedVocabularyIds = excludedVocabularyIds,
-                                               minCount = private$minCount,
-                                               connection = connection,
-                                               vocabDatabaseSchema = vocabDatabaseSchema)
       message("  - Found ", nrow(recommendations), " additional concepts through Phoebe recommendations")
       concepts <- bind_rows(descendants, recommendations)
+      validateConcepts(concepts)
       return(concepts)
     }
   ),
@@ -140,42 +166,28 @@ getHecatePhoebeRecommendations <- function(conceptIds) {
   return(phoebeData)
 }
 
-filterRecommendations <- function(recommendations,
-                                  domainSettings,
-                                  excludedVocabularyIds,
-                                  minCount,
-                                  connection,
-                                  vocabDatabaseSchema) {
-  concepts <- getConceptsFromIds(conceptIds = unique(recommendations$conceptId),
-                                 origin = "RECOMMENDED",
-                                 status = "UNADJUDICATED",
-                                 connection = connection,
-                                 vocabDatabaseSchema = vocabDatabaseSchema)
-  recommendations <- concepts |>
-    inner_join(recommendations |>
-                 select("conceptId", "relationshipId", "recordCount"),
-               by = join_by("conceptId"))
-  if (!is.null(domainSettings)) {
-    recommendations <- recommendations |>
-      filter(.data$domainId %in% domainSettings$domainId,
-             .data$conceptClassId %in% domainSettings$conceptClassIds)
-    if (!is.null(domainSettings$phoebeExclusions)) {
-      recommendations <- recommendations |>
-        filter(!.data$relationshipId %in% domainSettings$phoebeExclusions)
+addHecateRecordCounts <- function(concepts) {
+  baseUrl <- "https://hecate.pantheon-hds.com/api/concepts/"
+  concepts <- concepts |>
+    mutate(recordCount = 0)
+  for (i in seq_len(nrow(concepts))) {
+    response <- httr::GET(paste0(baseUrl, as.integer(concepts$conceptId[i])))
+
+    if (httr::status_code(response) == 200) {
+      contentText <- httr::content(response, "text", encoding = "UTF-8")
+      if (contentText != "[]") {
+        data <- jsonlite::fromJSON(contentText)
+        concepts$recordCount[i] <- data$record_count
+      }
+    } else {
+      stop(sprintf(
+        "Error in Hecate search for concept %s: %s",
+        concepts$conceptId[i],
+        httr::status_code(response)
+      ))
     }
   }
-  if (!is.null(excludedVocabularyIds)) {
-    recommendations <- recommendations |>
-      filter(!.data$vocabularyId %in% excludedVocabularyIds)
-  }
-  if (minCount > 0) {
-    recommendations <- recommendations |>
-      filter(.data$recordCount >= minCount)
-  }
-  recommendations <- recommendations |>
-    select(-"relationshipId", -"recordCount") |>
-    distinct()
-  return(recommendations)
+  return(concepts)
 }
 
 getDescendants <- function(conceptIds, domainSettings, excludedVocabularyIds, connection, vocabDatabaseSchema) {
@@ -189,10 +201,9 @@ getDescendants <- function(conceptIds, domainSettings, excludedVocabularyIds, co
     INNER JOIN @cdm_database_schema.concept_ancestor
       ON descendant_concept_id = concept_id
     WHERE ancestor_concept_id IN (@concept_ids)
-    {@domain_ids != ''} ? { AND domain_id IN (@domain_ids)}
-    {@concept_class_ids != ''} ? { AND concept_class_id IN (@concept_class_ids)}
-    {@excluded_vocabulary_ids != ''} ? { AND vocabulary_id NOT IN (@concept_class_ids)}
-    ;
+    {@domain_ids != ''} ? {  AND domain_id IN (@domain_ids)}
+    {@excluded_vocabulary_ids != ''} ? {  AND vocabulary_id NOT IN (@excluded_vocabulary_ids)}
+      AND invalid_reason IS NULL;
   "
   descendants <- DatabaseConnector::renderTranslateQuerySql(
     connection = connection,
@@ -200,10 +211,34 @@ getDescendants <- function(conceptIds, domainSettings, excludedVocabularyIds, co
     cdm_database_schema = vocabDatabaseSchema,
     concept_ids = conceptIds,
     domain_ids = paste(sprintf("'%s'", domainSettings$domainIds), collapse = ", "),
-    concept_class_ids = paste(sprintf("'%s'", domainSettings$conceptClassIds), collapse = ", "),
     excluded_vocabulary_ids = paste(sprintf("'%s'", excludedVocabularyIds), collapse = ", "),
     snakeCaseToCamelCase = TRUE
   )
   descendants <- asConcepts(descendants, origin = "DESCENDANT", status = "UNADJUDICATED")
   return(descendants)
+}
+
+removeGenericConcepts <- function(concepts) {
+  excludeWords <- c(
+    "finding$",
+    "^Disorder of",
+    "^Finding of",
+    "^Disease of",
+    "Injury of",
+    "by site$",
+    "by body site$",
+    "by mechanism$",
+    "of body region$",
+    "of anatomical site$",
+    "of specific body structure$"
+  )
+
+  exceptionWords <- c(
+    "due to",
+    "caused by"
+    )
+  concepts <- concepts |>
+    filter(!grepl(paste(excludeWords, collapse = "|"), .data$conceptName) |
+             grepl(paste(exceptionWords, collapse = "|"), .data$conceptName))
+  return(concepts)
 }

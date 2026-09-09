@@ -49,6 +49,8 @@ DefaultConceptAdjudicator <- R6::R6Class(
     #' @param batchSize               The number of concepts to adjudicate at once.
     #' @param nForQuickScreen         The minimum number of concepts to trigger the quick screening.
     #' @param quickScreenBatchSize    The number of concepts to enter quick screening at once.
+    #' @param maxN                    If the number of concepts to adjudicate is greater than this number, an error of
+    #'                                class `TooManyConceptsError` is thrown.
     #' @param prompt                  The prompt for the main concept adjudication. See Details for requirements
     #' @param systemPrompt            The system prompt for the main concept adjudication. See Details for requirements
     #' @param quickScreenPrompt       The prompt for the quick screening. See Details for requirements
@@ -103,8 +105,9 @@ DefaultConceptAdjudicator <- R6::R6Class(
     #'
     #' @export
     initialize = function(batchSize = 20,
-                          nForQuickScreen = 100,
+                          nForQuickScreen = 500,
                           quickScreenBatchSize = 200,
+                          maxN = 5000,
                           prompt = NULL,
                           systemPrompt = NULL,
                           quickScreenPrompt = NULL,
@@ -113,15 +116,17 @@ DefaultConceptAdjudicator <- R6::R6Class(
       checkmate::assertIntegerish(batchSize, len = 1, lower = 1, add = errorMessages)
       checkmate::assertIntegerish(nForQuickScreen, len = 1, lower = 1, add = errorMessages)
       checkmate::assertIntegerish(quickScreenBatchSize, len = 1, lower = 1, add = errorMessages)
+      checkmate::assertIntegerish(maxN, len = 1, lower = 1, add = errorMessages)
       checkmate::assertCharacter(prompt, len = 1, null.ok = TRUE, add = errorMessages)
       checkmate::assertCharacter(systemPrompt, len = 1, null.ok = TRUE, add = errorMessages)
       checkmate::assertCharacter(quickScreenPrompt, len = 1, null.ok = TRUE, add = errorMessages)
       checkmate::assertCharacter(quickScreenSystemPrompt, len = 1, null.ok = TRUE, add = errorMessages)
       checkmate::reportAssertions(collection = errorMessages)
 
-      private$batchSize = batchSize
-      private$nForQuickScreen = nForQuickScreen
-      private$quickScreenBatchSize = quickScreenBatchSize
+      private$batchSize <- batchSize
+      private$nForQuickScreen <- nForQuickScreen
+      private$quickScreenBatchSize <- quickScreenBatchSize
+      private$maxN <- maxN
 
       if (is.null(prompt)) {
         # promptFile <- "inst/prompts/Adjudication.txt"
@@ -160,6 +165,14 @@ DefaultConceptAdjudicator <- R6::R6Class(
       checkmate::assertEnvironment(costTracker, null.ok = TRUE, add = errorMessages)
       checkmate::reportAssertions(collection = errorMessages)
 
+      if (nrow(concepts) > private$maxN) {
+        error <- errorCondition(
+          message = sprintf("Number of concepts (%d) exceeds maximum allowed (%d)", nrow(concepts), private$maxN),
+          class = "TooManyConceptsError"
+        )
+        stop(error)
+      }
+
       if (nrow(concepts) >= private$nForQuickScreen) {
         concepts <- quickScreen(concepts = concepts,
                                 name = name,
@@ -195,6 +208,7 @@ DefaultConceptAdjudicator <- R6::R6Class(
     batchSize = NULL,
     nForQuickScreen = NULL,
     quickScreenBatchSize = NULL,
+    maxN = NULL,
     prompt = NULL,
     systemPrompt = NULL,
     quickScreenPrompt = NULL,
@@ -268,7 +282,6 @@ adjudicate <- function(concepts,
                        systemPrompt,
                        llmClient,
                        costTracker) {
-
   outputType <- ellmer::type_array(
     ellmer::type_object(
       conceptId = ellmer::type_integer(),
@@ -292,14 +305,28 @@ adjudicate <- function(concepts,
                                                   name = name,
                                                   clinicalDefinition = clinicalDefinition,
                                                   concepts = batch)
-    adjudicatedConcepts[[length(adjudicatedConcepts) + 1]] <- queryLlm(prompt = instantiatedPrompt,
-                                                                       systemPrompt = instantiatedSystemPrompt,
-                                                                       llmClient = llmClient,
-                                                                       costTracker = costTracker,
-                                                                       outputType = outputType)
+    maxAttempts <- 5
+    for (attempt in seq_len(maxAttempts)) {
+      adjudicationResults <- queryLlm(prompt = instantiatedPrompt,
+                                      systemPrompt = instantiatedSystemPrompt,
+                                      llmClient = llmClient,
+                                      costTracker = costTracker,
+                                      outputType = outputType)
+      if (all(sort(batch$conceptId) == sort(adjudicationResults$conceptId))) {
+        break
+      } else {
+        if (attempt == maxAttempts) {
+          stop("During adjudication the LLM failed to return all input concepts ", maxAttempts, " times")
+        }
+        message("  LLM did not return all concepts. Retrying")
+      }
+    }
+
+    adjudicatedConcepts[[length(adjudicatedConcepts) + 1]] <- adjudicationResults
     start <- end + 1
   }
   adjudicatedConcepts <- bind_rows(adjudicatedConcepts)
+
   if ("rationale" %in% colnames(concepts)) {
     concepts <- concepts |>
       select(-"rationale")
@@ -324,7 +351,7 @@ instantiatePrompt <- function(prompt, name, clinicalDefinition, concepts) {
   }
   json <- concepts |>
     select("conceptId", "conceptName") |>
-    jsonlite::toJSON(pretty = TRUE)
+    jsonlite::toJSON()
   instantiatedPrompt <- gsub("%concepts%", json, instantiatedPrompt)
   return(instantiatedPrompt)
 }

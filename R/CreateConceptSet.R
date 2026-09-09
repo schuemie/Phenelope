@@ -28,8 +28,7 @@
 #' @template TempEmulationSchema
 #' @param cacheFolder               Optional: Folder where intermediary results can be stored.
 #' @template ExcludedVocabularyIds
-#' @param findSeedConceptSettings   A settings object for finding seed concepts (when not provided in `seedConceptIds`)
-#'                                  as created using `createFindSeedConceptSettings()`.
+#' @param seedConceptFinder         An object of class `SeedConceptFinder` for finding seed concepts when not provided.
 #' @param conceptRecommender        An object of class `ConceptRecommender` for recommending additional concepts.
 #' @param conceptAdjudicator        An object of class `ConceptAdjudicator` for adjudicating recommended concepts.
 #' @param condenseConceptSet        Condense the resulting concept set?
@@ -48,7 +47,7 @@ createConceptSet <- function(
     tempEmulationSchema = getOption("sqlRenderTempEmulationSchema"),
     cacheFolder = NULL,
     excludedVocabularyIds = c("ICDO3"),
-    findSeedConceptSettings = createFindSeedConceptSettings(),
+    seedConceptFinder = DefaultSeedConceptFinder$new(),
     conceptRecommender = HecateConceptRecomender$new(),
     conceptAdjudicator = DefaultConceptAdjudicator$new(),
     condenseConceptSet = TRUE) {
@@ -62,7 +61,7 @@ createConceptSet <- function(
   checkmate::assertCharacter(tempEmulationSchema, len = 1, null.ok = TRUE, add = errorMessages)
   checkmate::assertCharacter(cacheFolder, len = 1, null.ok = TRUE, add = errorMessages)
   checkmate::assertCharacter(excludedVocabularyIds, add = errorMessages)
-  checkmate::assertClass(findSeedConceptSettings, "FindSeedConceptSettings", add = errorMessages)
+  checkmate::assertR6(seedConceptFinder, "SeedConceptFinder", add = errorMessages)
   checkmate::assertR6(conceptRecommender, "ConceptRecommender", add = errorMessages)
   checkmate::assertR6(conceptAdjudicator, "ConceptAdjudicator", add = errorMessages)
   checkmate::assertLogical(condenseConceptSet, add = errorMessages)
@@ -105,13 +104,12 @@ createConceptSet <- function(
   } else {
     message("Finding seed concepts")
     concepts <- withCache({
-      findSeedConcepts(name = name,
-                       clinicalDefinition = clinicalDefinition,
-                       llmClient = llmClient,
-                       costTracker = costTracker,
-                       findSeedConceptSettings = findSeedConceptSettings,
-                       domainSettings = domainSettings,
-                       excludedVocabularyIds = excludedVocabularyIds)
+      seedConceptFinder$findSeedConcepts(name = name,
+                                         clinicalDefinition = clinicalDefinition,
+                                         llmClient = llmClient,
+                                         costTracker = costTracker,
+                                         domainSettings = domainSettings,
+                                         excludedVocabularyIds = excludedVocabularyIds)
     },
     cacheFolder = cacheFolder,
     fileName = "SeedConcepts.csv"
