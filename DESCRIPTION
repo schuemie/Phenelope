@@ -28,7 +28,8 @@ Suggests:
     rmarkdown,
     testthat,
     withr,
-    keyring
+    keyring,
+    Eunomia
 Remotes:
     ohdsi/Capr,
     ohdsi/CirceR

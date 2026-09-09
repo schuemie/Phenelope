@@ -23,13 +23,16 @@ HecateConceptRecomender constructor
 \subsection{\code{HecateConceptRecomender$new()}}{
   \subsection{Usage}{
     \if{html}{\out{<div class="r">}}
-    \preformatted{HecateConceptRecomender$new(minCount = 0)}
+    \preformatted{HecateConceptRecomender$new(minCount = 0, keepLowCountConcepts = TRUE)}
     \if{html}{\out{</div>}}
   }
   \subsection{Arguments}{
     \if{html}{\out{<div class="arguments">}}
     \describe{
-      \item{\code{minCount}}{Minimum record count for concepts to be recommended.}
+      \item{\code{minCount}}{Minimum record count for concepts to be considered for adjudication.}
+      \item{\code{keepLowCountConcepts}}{If TRUE concepts are kepts with status BELOW_MIN_COUNT. These concepts will be
+included in the final concept set only if they are descendants of concepts that are
+explicitly included in the concept set.}
     }
     \if{html}{\out{</div>}}
   }

@@ -19,8 +19,8 @@
 #' @param dataFrame Input data frame
 #' @param origin    Optional: the origin to use for all concepts in the input. Can be 'SEED', 'DESCENDANT', or
 #'                  'RECOMMENDED'.
-#' @param status    Optional: the status to use for all concepts in the input. Can be 'UNADJUDICATED', 'APPROVED', or
-#'                  'REJECTED'
+#' @param status    Optional: the status to use for all concepts in the input. Can be 'UNADJUDICATED', 'APPROVED',
+#'                  'REJECTED', or 'BELOW_MIN_COUNT`.`
 #'
 #' @description
 #' The `Concepts` class enforces several properties of a data frame. First of all, it *must* have columns:
@@ -44,6 +44,7 @@
 #' - UNADJUDICATED
 #' - APPROVED
 #' - REJECTED
+#' - BELOW_MIN_COUNT
 #'
 #' Finally, the `conceptId` column cannot have duplicates.
 #'
@@ -106,7 +107,8 @@ validateConcepts <- function(concepts) {
   checkmate::assertSubset(concepts$status,
                           choices = c("UNADJUDICATED",
                                       "APPROVED",
-                                      "REJECTED"),
+                                      "REJECTED",
+                                      "BELOW_MIN_COUNT"),
                           add = errorMessages)
   checkmate::reportAssertions(collection = errorMessages)
   if (any(duplicated(concepts$conceptId))) {
@@ -120,6 +122,31 @@ asConceptSetExpression <- function(concepts, name, connection, vocabDatabaseSche
   approvedConceptIds <- concepts |>
     filter(.data$status == "APPROVED") |>
     pull(.data$conceptId)
+
+  belowMinCountConceptIds <- concepts |>
+    filter(.data$status == "BELOW_MIN_COUNT") |>
+    pull(.data$conceptId)
+
+  if (length(belowMinCountConceptIds) > 0) {
+    # Keep concepts with record counts below the specified minimum only if they are descendant of an already included
+    # concept:
+    sql <- "
+      SELECT descendant_concept_id AS concept_id
+      FROM @vocab_database_schema.concept_ancestor
+      WHERE ancestor_concept_id IN (@ancestor_concept_ids)
+        AND descendant_concept_id IN (@descendant_concept_ids);
+    "
+    keepConceptIds <- DatabaseConnector::renderTranslateQuerySql(
+      connection = connection,
+      sql = sql,
+      vocab_database_schema = vocabDatabaseSchema,
+      ancestor_concept_ids = approvedConceptIds,
+      descendant_concept_ids = belowMinCountConceptIds,
+      snakeCaseToCamelCase = TRUE
+    )
+    approvedConceptIds <- c(approvedConceptIds, keepConceptIds$conceptId)
+  }
+
   conceptSet <- Capr::cs(approvedConceptIds, name = name)
 
   conceptSet <- Capr::getConceptSetDetails(conceptSet, connection, vocabularyDatabaseSchema = vocabDatabaseSchema)

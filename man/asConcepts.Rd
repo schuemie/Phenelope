@@ -12,8 +12,8 @@ asConcepts(dataFrame, origin = NULL, status = NULL)
 \item{origin}{Optional: the origin to use for all concepts in the input. Can be 'SEED', 'DESCENDANT', or
 'RECOMMENDED'.}
 
-\item{status}{Optional: the status to use for all concepts in the input. Can be 'UNADJUDICATED', 'APPROVED', or
-'REJECTED'}
+\item{status}{Optional: the status to use for all concepts in the input. Can be 'UNADJUDICATED', 'APPROVED',
+'REJECTED', or 'BELOW_MIN_COUNT\code{.}}
 }
 \value{
 An object of type \code{Concepts}.
@@ -42,6 +42,7 @@ Third, the \code{status} column \emph{must} be one of these values:
 \item UNADJUDICATED
 \item APPROVED
 \item REJECTED
+\item BELOW_MIN_COUNT
 }
 
 Finally, the \code{conceptId} column cannot have duplicates.

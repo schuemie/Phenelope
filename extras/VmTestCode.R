@@ -41,6 +41,7 @@ conceptSet <- createConceptSet(
   seedConceptFinder = DefaultSeedConceptFinder$new(minCount = 100),
   conceptRecommender = HecateConceptRecomender$new(minCount = 100)
 )
+writeLines(conceptSet)
 
 # Procedure, no clinical definition and no cache folder:
 conceptSet <- createConceptSet(

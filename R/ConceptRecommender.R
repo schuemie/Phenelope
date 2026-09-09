@@ -47,18 +47,24 @@ HecateConceptRecomender <- R6::R6Class(
 
     #' HecateConceptRecomender constructor
     #'
-    #' @param minCount Minimum record count for concepts to be recommended.
+    #' @param minCount             Minimum record count for concepts to be considered for adjudication.
+    #' @param keepLowCountConcepts If TRUE concepts are kepts with status BELOW_MIN_COUNT. These concepts will be
+    #'                             included in the final concept set only if they are descendants of concepts that are
+    #'                             explicitly included in the concept set.
     #'
     #' @returns
     #' An object of type `HecateConceptRecomender`.
     #'
     #' @export
-    initialize = function(minCount = 0) {
+    initialize = function(minCount = 0,
+                          keepLowCountConcepts = TRUE) {
       errorMessages <- checkmate::makeAssertCollection()
       checkmate::assertIntegerish(minCount, len = 1, lower = 0, add = errorMessages)
+      checkmate::assertLogical(keepLowCountConcepts, len = 1, add = errorMessages)
       checkmate::reportAssertions(collection = errorMessages)
 
       private$minCount <- minCount
+      private$keepLowCountConcepts <- keepLowCountConcepts
     },
     #' @description
     #' Recommends concepts using the Hecate Phoebe implementation.
@@ -84,7 +90,7 @@ HecateConceptRecomender <- R6::R6Class(
       if (private$minCount > 0) {
         descendants <- descendants |>
           addHecateRecordCounts() |>
-          filter(.data$recordCount > private$minCount) |>
+          mutate(status = if_else(.data$recordCount < private$minCount, "BELOW_MIN_COUNT", "UNADJUDICATED")) |>
           select(-"recordCount")
       }
       message("  - Found ", nrow(descendants), " additional concepts through descendants")
@@ -95,17 +101,18 @@ HecateConceptRecomender <- R6::R6Class(
         recommendations <- recommendations |>
           filter(!.data$relationshipId %in% domainSettings$phoebeExclusions)
       }
-      if (private$minCount > 0) {
-        recommendations <- recommendations |>
-          filter(.data$recordCount >= private$minCount)
-      }
+      belowMinCountConceptIds <- recommendations |>
+        filter(.data$recordCount < private$minCount) |>
+        pull(.data$conceptId) |>
+        unique()
+
       # Concept information (domain, valid) in Hecate may be outdated, so fetch from vocab server:
       recommendations <- getConceptsFromIds(
         conceptIds = recommendations$conceptId,
         origin = "RECOMMENDED",
-        status = "UNADJUDICATED",
         connection = connection,
-        vocabDatabaseSchema = vocabDatabaseSchema)
+        vocabDatabaseSchema = vocabDatabaseSchema) |>
+        mutate(status = if_else(.data$conceptId %in% belowMinCountConceptIds, "BELOW_MIN_COUNT", "UNADJUDICATED"))
 
       if (!is.null(domainSettings)) {
         recommendations <- recommendations |>
@@ -119,13 +126,19 @@ HecateConceptRecomender <- R6::R6Class(
         removeGenericConcepts() |>
         filter(!.data$conceptId %in% c(conceptIds, descendants$conceptId))
       message("  - Found ", nrow(recommendations), " additional concepts through Phoebe recommendations")
+
       concepts <- bind_rows(descendants, recommendations)
+      if (!private$keepLowCountConcepts) {
+        concepts <- concepts |>
+          filter(status != "BELOW_MIN_COUNT")
+      }
       validateConcepts(concepts)
       return(concepts)
     }
   ),
   private = list(
-    minCount = NULL
+    minCount = NULL,
+    keepLowCountConcepts = NULL
   )
 )
 
