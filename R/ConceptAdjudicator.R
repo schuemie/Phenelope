@@ -271,7 +271,7 @@ quickScreen <- function(concepts,
       mutate(rationale = paste("Quick screen:", .data$rationale),
              status = "REJECTED")
   )
-  return(concepts)
+  return(results)
 }
 
 adjudicate <- function(concepts,
@@ -312,7 +312,8 @@ adjudicate <- function(concepts,
                                       llmClient = llmClient,
                                       costTracker = costTracker,
                                       outputType = outputType)
-      if (all(sort(batch$conceptId) == sort(adjudicationResults$conceptId))) {
+      if (nrow(batch) == nrow(adjudicationResults) &&
+          all(sort(batch$conceptId) == sort(adjudicationResults$conceptId))) {
         break
       } else {
         if (attempt == maxAttempts) {
