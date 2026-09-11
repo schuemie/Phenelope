@@ -254,6 +254,9 @@ quickScreen <- function(concepts,
     start <- end + 1
   }
   conceptsToRemove <- bind_rows(conceptsToRemove)
+  # If LLM duplicates a concept, just pick the first one:
+  conceptsToRemove <- conceptsToRemove |>
+    filter(!duplicated(.data$conceptId))
 
   results <- concepts |>
     filter(!.data$conceptId %in% conceptsToRemove$conceptId)

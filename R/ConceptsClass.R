@@ -155,7 +155,17 @@ asConceptSetExpression <- function(concepts, name, connection, vocabDatabaseSche
 }
 
 getConceptsFromIds <- function(conceptIds, origin = "SEED", status = "UNADJUDICATED", connection, vocabDatabaseSchema) {
-  sql <- "
+  if (length(conceptIds) == 0) {
+    concepts <- tibble(
+      conceptId = 1,
+      conceptName = "",
+      vocabularyId = "",
+      domainId = "",
+      conceptClassId = ""
+    ) |>
+      filter(.data$conceptId == 2)
+  } else {
+    sql <- "
     SELECT concept_id,
       concept_name,
       vocabulary_id,
@@ -165,13 +175,14 @@ getConceptsFromIds <- function(conceptIds, origin = "SEED", status = "UNADJUDICA
     WHERE concept_id IN (@concept_ids)
       AND invalid_reason IS NULL;
   "
-  concepts <- DatabaseConnector::renderTranslateQuerySql(
-    connection = connection,
-    sql = sql,
-    cdm_database_schema = vocabDatabaseSchema,
-    concept_ids = conceptIds,
-    snakeCaseToCamelCase = TRUE
-  )
+    concepts <- DatabaseConnector::renderTranslateQuerySql(
+      connection = connection,
+      sql = sql,
+      cdm_database_schema = vocabDatabaseSchema,
+      concept_ids = conceptIds,
+      snakeCaseToCamelCase = TRUE
+    )
+  }
   concepts <- asConcepts(concepts, origin = origin, status = status)
   return(concepts)
 }

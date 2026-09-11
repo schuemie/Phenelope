@@ -143,6 +143,37 @@ HecateConceptRecomender <- R6::R6Class(
 )
 
 getHecatePhoebeRecommendations <- function(conceptIds) {
+  # Calling https://hecate.pantheon-hds.com/api/concepts/phoebe/bulk with 1 concept ID throws an error
+  if (length(conceptIds) == 1) {
+    return(getHecatePhoebeRecommendationsSingle(conceptIds))
+  } else {
+    return(getHecatePhoebeRecommendationsBulk(conceptIds))
+  }
+}
+
+getHecatePhoebeRecommendationsSingle <- function(conceptId) {
+  urlTemplate <- "https://hecate.pantheon-hds.com/api/concepts/%d/phoebe"
+
+  message("  Searching Phoebe for concepts ", conceptId)
+
+  response <- httr::GET(sprintf(urlTemplate, conceptId))
+
+  if (httr::status_code(response) == 200) {
+    contentText <- httr::content(response, "text", encoding = "UTF-8")
+    if (contentText == "[]") {
+      data <- createEmptyPhoebeData()
+    } else {
+      data <- jsonlite::fromJSON(contentText)
+    }
+  } else {
+    stop("Error in phoebe search for concept ", conceptId, " with HTML repsonse ", httr::status_code(response))
+  }
+  data <- data |>
+    SqlRender::snakeCaseToCamelCaseNames()
+  return(data)
+}
+
+getHecatePhoebeRecommendationsBulk <- function(conceptIds) {
   phoebeUrlstring <- "https://hecate.pantheon-hds.com/api/concepts/phoebe/bulk"
 
   phoebeData <- list()
@@ -159,7 +190,7 @@ getHecatePhoebeRecommendations <- function(conceptIds) {
     if (httr::status_code(response) == 200) {
       contentText <- httr::content(response, "text", encoding = "UTF-8")
       if (contentText == "[]") {
-        data <- NULL
+        data <- createEmptyPhoebeData()
       } else {
         data <- jsonlite::fromJSON(contentText)
         data <- bind_rows(data$results)
@@ -177,6 +208,18 @@ getHecatePhoebeRecommendations <- function(conceptIds) {
   phoebeData <- bind_rows(phoebeData) |>
     SqlRender::snakeCaseToCamelCaseNames()
   return(phoebeData)
+}
+
+createEmptyPhoebeData <- function() {
+  data <- tibble(
+    relationship_id = "",
+    concept_id = 1,
+    concept_name = "",
+    vocabulary_id = "",
+    record_count = 0
+  ) |>
+    filter(.data$concept_id == 2)
+  return(data)
 }
 
 addHecateRecordCounts <- function(concepts) {
@@ -249,7 +292,7 @@ removeGenericConcepts <- function(concepts) {
   exceptionWords <- c(
     "due to",
     "caused by"
-    )
+  )
   concepts <- concepts |>
     filter(!grepl(paste(excludeWords, collapse = "|"), .data$conceptName) |
              grepl(paste(exceptionWords, collapse = "|"), .data$conceptName))
